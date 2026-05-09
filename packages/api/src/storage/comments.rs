@@ -113,3 +113,18 @@ pub async fn delete_comment_db(comment_id: &str, user_id: &str, user_name: &str)
 
     Ok(())
 }
+
+pub async fn update_comment_db(comment_id: &str, user_id: &str, new_content: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    let result = sqlx::query!(
+        "UPDATE wallpaper_comments SET content = $1 WHERE id = $2 AND user_id = $3",
+        new_content, comment_id, user_id
+    )
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Comment not found or permission denied"));
+    }
+    Ok(())
+}

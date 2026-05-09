@@ -493,3 +493,12 @@ pub async fn admin_ban_user_db(user_id: &str, banned: bool) -> anyhow::Result<()
     
     Ok(())
 }
+
+pub async fn update_user_role_db(user_id: &str, new_role: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!("UPDATE users SET role = $1 WHERE id = $2", new_role, user_id)
+        .execute(pool)
+        .await?;
+    get_user_cache().remove(user_id).await;
+    Ok(())
+}

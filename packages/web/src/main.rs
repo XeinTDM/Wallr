@@ -70,7 +70,11 @@ fn main() {
                 }
             }
 
-            let _ = api::storage::increment_download(&id, &ip).await;
+            let download_id = id.clone();
+            let download_ip = ip.clone();
+            tokio::spawn(async move {
+                let _ = api::storage::increment_download(&download_id, &download_ip).await;
+            });
 
             let is_native_format = format == "avif" || format == "jpg" || format == "jpeg";
             if width.is_none() && is_native_format {

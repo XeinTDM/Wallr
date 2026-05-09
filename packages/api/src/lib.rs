@@ -1237,3 +1237,95 @@ pub async fn require_moderator() -> Result<User, dioxus::prelude::ServerFnError>
     }
     Ok(user)
 }
+
+#[server]
+pub async fn update_collection(
+    collection_id: String,
+    name: String,
+    description: Option<String>,
+    is_private: bool,
+) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::update_collection_db(&collection_id, &name, description.as_deref(), is_private)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn delete_collection(collection_id: String) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::delete_collection_db(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn update_wallpaper(
+    id: String,
+    title: String,
+    tags: Vec<String>,
+    is_private: bool,
+) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::update_wallpaper_db(&id, &title, &tags, is_private)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn delete_my_wallpaper(id: String) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::delete_wallpaper(&id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn report_wallpaper(wallpaper_id: String, reason: String) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::report_wallpaper_db(&wallpaper_id, &user.id, &reason)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn update_comment(comment_id: String, content: String) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::update_comment_db(&comment_id, &user.id, &content)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn delete_comment(comment_id: String) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::delete_comment_db(&comment_id, &user.id, &user.name)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn delete_my_account() -> Result<(), ServerFnError> {
+    use dioxus_fullstack::FullstackContext;
+    let user = require_auth().await?;
+    crate::storage::delete_user(&user.id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    if let Some(ctx) = FullstackContext::current() {
+        let cookie = "session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        ctx.add_response_header(
+            http::header::SET_COOKIE,
+            cookie.parse::<http::header::HeaderValue>().unwrap(),
+        );
+    }
+    Ok(())
+}
+
+#[server]
+pub async fn update_user_role(user_id: String, new_role: String) -> Result<(), ServerFnError> {
+    let _admin = require_admin().await?;
+    crate::storage::update_user_role_db(&user_id, &new_role)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}

@@ -617,3 +617,41 @@ pub async fn get_admin_stats_db() -> anyhow::Result<crate::AdminStats> {
         total_likes: w_stats.total_likes.unwrap_or(0) as u32,
     })
 }
+
+pub async fn update_wallpaper_db(
+    id: &str,
+    title: &str,
+    tags: &Vec<String>,
+    is_private: bool,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE wallpapers SET title = $1, tags = $2, is_private = $3 WHERE id = $4",
+        title,
+        sqlx::types::Json(tags) as _,
+        is_private,
+        id
+    )
+    .execute(pool)
+    .await?;
+
+    super::cache::get_wallpaper_cache().remove(id).await;
+    super::cache::get_wallpaper_list_cache().invalidate_all();
+    Ok(())
+}
+
+pub async fn report_wallpaper_db(
+    wallpaper_id: &str,
+    reporter_id: &str,
+    reason: &str,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query!(
+        "INSERT INTO reported_wallpapers (id, wallpaper_id, reporter_id, reason) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        id, wallpaper_id, reporter_id, reason
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}

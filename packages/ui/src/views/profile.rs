@@ -1,8 +1,7 @@
 use crate::app::Route;
-use api::{UserCollection, get_my_collections, create_user_collection};
-use dioxus::prelude::*;
 use crate::{LoadingScreen, WallpaperCard, use_toaster};
-
+use api::{UserCollection, create_user_collection, get_my_collections};
+use dioxus::prelude::*;
 
 #[component]
 pub fn Profile() -> Element {
@@ -10,6 +9,19 @@ pub fn Profile() -> Element {
     let user = use_context::<Signal<crate::app::AuthState>>();
     let nav = use_navigator();
     let toaster = use_toaster();
+
+    let mut loaded_uploads = use_signal(|| false);
+    let mut loaded_collections = use_signal(|| false);
+    let mut loaded_favorites = use_signal(|| true);
+    let mut loaded_analytics = use_signal(|| false);
+
+    use_effect(move || match active_tab().as_str() {
+        "uploads" => loaded_uploads.set(true),
+        "collections" => loaded_collections.set(true),
+        "favorites" => loaded_favorites.set(true),
+        "analytics" => loaded_analytics.set(true),
+        _ => {}
+    });
 
     let user_data = match user() {
         crate::app::AuthState::Loading => return rsx! { LoadingScreen {} },
@@ -20,10 +32,42 @@ pub fn Profile() -> Element {
         crate::app::AuthState::Authenticated(u) => u,
     };
 
-    let uploads = use_resource(move || async move { api::get_user_uploads(0, 100).await });
-    let collections = use_resource(move || async move { get_my_collections().await });
-    let favorites = use_resource(move || async move { api::get_user_favorites(0, 100).await });
-    let analytics = use_resource(move || async move { api::get_creator_analytics().await });
+    let uploads = use_resource(move || {
+        let load = loaded_uploads();
+        async move {
+            if !load {
+                std::future::pending::<()>().await;
+            }
+            api::get_user_uploads(0, 100).await
+        }
+    });
+    let collections = use_resource(move || {
+        let load = loaded_collections();
+        async move {
+            if !load {
+                std::future::pending::<()>().await;
+            }
+            get_my_collections().await
+        }
+    });
+    let favorites = use_resource(move || {
+        let load = loaded_favorites();
+        async move {
+            if !load {
+                std::future::pending::<()>().await;
+            }
+            api::get_user_favorites(0, 100).await
+        }
+    });
+    let analytics = use_resource(move || {
+        let load = loaded_analytics();
+        async move {
+            if !load {
+                std::future::pending::<()>().await;
+            }
+            api::get_creator_analytics().await
+        }
+    });
 
     let uploads_count = match uploads() {
         Some(Ok(list)) => list.len() as u32,

@@ -51,9 +51,22 @@ pub async fn get_user_collections(user_id: &str) -> anyhow::Result<Vec<crate::Us
         r#"
         SELECT 
             c.id, c.user_id, c.name, c.description, c.is_private, c.created_at,
-            (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = c.id) as item_count,
-            (SELECT w.thumbnail_url FROM collection_items ci JOIN wallpapers w ON w.id = ci.wallpaper_id WHERE ci.collection_id = c.id ORDER BY ci.added_at DESC LIMIT 1) as cover_url
+            COALESCE(ic.count, 0) as item_count,
+            lc.thumbnail_url as cover_url
         FROM user_collections c
+        LEFT JOIN (
+            SELECT collection_id, COUNT(*) as count
+            FROM collection_items
+            GROUP BY collection_id
+        ) ic ON ic.collection_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT w.thumbnail_url
+            FROM collection_items ci
+            JOIN wallpapers w ON w.id = ci.wallpaper_id
+            WHERE ci.collection_id = c.id
+            ORDER BY ci.added_at DESC
+            LIMIT 1
+        ) lc ON true
         WHERE c.user_id = $1
         ORDER BY c.created_at DESC
         "#,
@@ -80,9 +93,22 @@ pub async fn get_public_user_collections_db(user_id: &str) -> anyhow::Result<Vec
         r#"
         SELECT 
             c.id, c.user_id, c.name, c.description, c.is_private, c.created_at,
-            (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = c.id) as item_count,
-            (SELECT w.thumbnail_url FROM collection_items ci JOIN wallpapers w ON w.id = ci.wallpaper_id WHERE ci.collection_id = c.id ORDER BY ci.added_at DESC LIMIT 1) as cover_url
+            COALESCE(ic.count, 0) as item_count,
+            lc.thumbnail_url as cover_url
         FROM user_collections c
+        LEFT JOIN (
+            SELECT collection_id, COUNT(*) as count
+            FROM collection_items
+            GROUP BY collection_id
+        ) ic ON ic.collection_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT w.thumbnail_url
+            FROM collection_items ci
+            JOIN wallpapers w ON w.id = ci.wallpaper_id
+            WHERE ci.collection_id = c.id
+            ORDER BY ci.added_at DESC
+            LIMIT 1
+        ) lc ON true
         WHERE c.user_id = $1 AND c.is_private = false
         ORDER BY c.created_at DESC
         "#,
@@ -169,4 +195,41 @@ pub async fn get_collection_wallpapers_db(collection_id: &str, page: u32, limit:
     }
 
     Ok(std::sync::Arc::new(wallpapers))
+}
+
+pub async fn update_collection_db(
+    collection_id: &str,
+    name: &str,
+    description: Option<&str>,
+    is_private: bool,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE user_collections SET name = $1, description = $2, is_private = $3 WHERE id = $4",
+        name,
+        description,
+        is_private,
+        collection_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_collection_db(collection_id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    
+    let mut tx = pool.begin().await?;
+    
+    sqlx::query!("DELETE FROM collection_items WHERE collection_id = $1", collection_id)
+        .execute(&mut *tx)
+        .await?;
+        
+    sqlx::query!("DELETE FROM user_collections WHERE id = $1", collection_id)
+        .execute(&mut *tx)
+        .await?;
+        
+    tx.commit().await?;
+    
+    Ok(())
 }
