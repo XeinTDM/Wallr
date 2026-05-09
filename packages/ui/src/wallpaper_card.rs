@@ -1,28 +1,23 @@
 use dioxus::prelude::*;
 use lucide_dioxus::{Download, Heart};
+use api::Wallpaper;
 
 const CARD_CSS: Asset = asset!("/assets/styling/wallpaper_card.css");
 
 #[derive(Props, Clone, PartialEq)]
 pub struct WallpaperCardProps {
-    pub id: String,
-    pub title: String,
-    pub author: String,
-    pub image_url: String,
-    pub tags: Vec<String>,
-    pub likes: u32,
-    pub downloads: u32,
+    pub wallpaper: Wallpaper,
 }
 
 #[component]
 pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
-    let mut likes_count = use_signal(|| props.likes);
-    let mut downloads_count = use_signal(|| props.downloads);
+    let mut likes_count = use_signal(|| props.wallpaper.likes);
+    let mut downloads_count = use_signal(|| props.wallpaper.downloads);
     let mut has_downloaded = use_signal(|| false);
 
-    let is_liked = crate::FAVORITED_IDS.read().contains(&props.id);
+    let is_liked = crate::FAVORITED_IDS.read().contains(&props.wallpaper.id);
     
-    let toggle_id = props.id.clone();
+    let toggle_id = props.wallpaper.id.clone();
 
     rsx! {
         document::Stylesheet { href: CARD_CSS }
@@ -35,8 +30,8 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                 style: "position: relative; overflow: hidden; border-radius: 20px; background: var(--bg-secondary); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; aspect-ratio: 16 / 10;",
 
                 img {
-                    src: "{props.image_url}",
-                    alt: "{props.title}",
+                    src: "{crate::resolve_asset_url(&props.wallpaper.thumbnail_url)}",
+                    alt: "{props.wallpaper.title}",
                     loading: "lazy",
                     style: "width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);"
                 }
@@ -74,9 +69,9 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                         a {
                             class: "action-btn download-btn",
                             style: "display: flex; align-items: center; gap: 8px; backdrop-filter: blur(12px); padding: 6px 12px; border-radius: 10px; color: white; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.2s;",
-                            href: "/wallpaper/{props.id}/download",
+                            href: "/wallpaper/{props.wallpaper.id}/download",
                             target: "_blank",
-                            download: "{props.title}",
+                            download: "{props.wallpaper.title}",
                             onclick: move |e| {
                                 e.stop_propagation();
                                 if !has_downloaded() {
@@ -92,16 +87,16 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                     div {
                         class: "card-info-bottom",
                         style: "display: flex; flex-direction: column;",
-                        h3 { style: "font-size: 18px; font-weight: 800; color: white; margin-bottom: 2px; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);", "{props.title}" }
+                        h3 { style: "font-size: 18px; font-weight: 800; color: white; margin-bottom: 2px; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);", "{props.wallpaper.title}" }
                         p { 
                             style: "display: flex; align-items: center; gap: 4px; opacity: 0.9; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 600; pointer-events: auto; z-index: 5;",
                             lucide_dioxus::User { size: 12 }
-                            a { href: "/user/{props.author.replace(\" \", \"-\")}", style: "color: inherit; text-decoration: none;", "{props.author}" }
+                            a { href: "/user/{props.wallpaper.author.replace(\" \", \"-\")}", style: "color: inherit; text-decoration: none;", "{props.wallpaper.author}" }
                         }
                     }
 
                     Link {
-                        to: "/wallpaper/{props.id}",
+                        to: "/wallpaper/{props.wallpaper.id}",
                         class: "card-click-overlay",
                         style: "position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; pointer-events: auto;",
                     }

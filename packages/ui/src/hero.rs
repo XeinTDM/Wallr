@@ -70,7 +70,7 @@ pub fn Hero() -> Element {
                             div {
                                 key: "{wallpaper.id}",
                                 class: if current_idx == i { "slide active" } else { "slide" },
-                                style: "position: absolute; inset: 0; background-size: cover; background-position: center; transition: opacity 0.8s ease-in-out; background-image: url({wallpaper.image_url});",
+                                style: "position: absolute; inset: 0; background-size: cover; background-position: center; transition: opacity 0.8s ease-in-out; background-image: url({crate::resolve_asset_url(&wallpaper.image_url)});",
                                 "data-index": "{i}",
                                 "data-title": "{wallpaper.title}",
                             }
@@ -138,7 +138,7 @@ pub fn Hero() -> Element {
                                         class: "menu-item-hover",
                                         onclick: move |_| _query.set(String::new()),
                                         img {
-                                            src: "{user.pfp_url}",
+                                            src: "{crate::resolve_asset_url(&user.pfp_url)}",
                                             style: "width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);"
                                         }
                                         span { style: "font-size: 14px; font-weight: 600;", "{user.name}" }

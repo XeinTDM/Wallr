@@ -50,13 +50,7 @@ pub fn WallpaperGrid(
                 for wp in wallpapers.read().iter() {
                     WallpaperCard {
                         key: "{wp.id}",
-                        id: wp.id.clone(),
-                        title: wp.title.clone(),
-                        author: wp.author.clone(),
-                        image_url: wp.thumbnail_url.clone(),
-                        tags: wp.tags.clone(),
-                        likes: wp.likes,
-                        downloads: wp.downloads
+                        wallpaper: wp.clone(),
                     }
                 }
                 

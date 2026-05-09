@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn get_storage_path() -> PathBuf {
-    PathBuf::from("packages/web/assets/uploads")
+    PathBuf::from("packages/ui/assets/uploads")
 }
 
 pub fn save_image_file(id: &str, suffix: &str, ext: &str, data: &[u8]) -> anyhow::Result<String> {

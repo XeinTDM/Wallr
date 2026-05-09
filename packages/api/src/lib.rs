@@ -474,6 +474,8 @@ pub async fn upload_raw_impl(
         }
     });
 
+    crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
+
     Ok(id)
 }
 

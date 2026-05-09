@@ -373,6 +373,7 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
             .await?;
 
         super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_list_cache().invalidate_all();
 
         Ok(false)
     } else {
@@ -385,6 +386,7 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
             .await?;
 
         super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_list_cache().invalidate_all();
 
         Ok(true)
     }
@@ -413,6 +415,7 @@ pub async fn increment_download(id: &str, ip: &str) -> anyhow::Result<()> {
         .await?;
 
     super::cache::get_wallpaper_cache().remove(id).await;
+    super::cache::get_wallpaper_list_cache().invalidate_all();
 
     Ok(())
 }
@@ -495,6 +498,7 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
         .await?;
 
         super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_list_cache().invalidate_all();
     }
 
     Ok(())

@@ -29,3 +29,17 @@ pub use category_hero::CategoryHero;
 
 mod loading_screen;
 pub use loading_screen::LoadingScreen;
+
+pub mod views;
+pub mod app;
+
+
+pub fn resolve_asset_url(url: &str) -> String {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if url.starts_with("/assets/uploads/") {
+            return url.replace("/assets/uploads/", "/upload/");
+        }
+    }
+    url.to_string()
+}

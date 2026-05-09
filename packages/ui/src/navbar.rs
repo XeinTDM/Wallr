@@ -95,7 +95,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            None::<std::rc::Rc<gloo_events::EventListener>>
+            None::<()>
         }
     });
 
@@ -185,7 +185,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                             class: "menu-item-hover",
                                             onclick: move |_| search_query.set(String::new()),
                                             img {
-                                                src: "{user.pfp_url}",
+                                                src: "{crate::resolve_asset_url(&user.pfp_url)}",
                                                 style: "width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);"
                                             }
                                             span { style: "font-size: 14px; font-weight: 600;", "{user.name}" }
@@ -297,7 +297,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                 span { style: "font-size: 11px; color: var(--text-muted);", "Pro Member" }
                             }
                             img {
-                                src: "{user.pfp_url}",
+                                src: "{crate::resolve_asset_url(&user.pfp_url)}",
                                 style: "width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.1);"
                             }
 

@@ -7,10 +7,18 @@ edition = "2024"
 dioxus = { workspace = true, features = ["router"] }
 api = { workspace = true }
 tokio = { version = "1.52.2", features = ["time"] }
-gloo-timers = { version = "0.4.0", features = ["futures"] }
-web-sys = { version = "0.3.97", features = ["Window", "Document", "Element", "DomRect", "KeyboardEvent", "HtmlElement"] }
 lucide-dioxus = { version = "3.11.0", features = ["all-icons"] }
+base64 = "0.22.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.4.0", features = ["futures"] }
+web-sys = { version = "0.3.97", features = ["Window", "Document", "Element", "DomRect", "KeyboardEvent", "HtmlElement", "File", "FileList", "Blob"] }
 gloo-events = "0.3.0"
+gloo-net = "0.7.0"
+wasm-bindgen = "0.2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.12", features = ["json", "multipart"] }
 
 [features]
 server = ["api/server"]
