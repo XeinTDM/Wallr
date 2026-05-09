@@ -1,0 +1,29 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dioxus = { workspace = true, features = ["router", "fullstack"] }
+ui = { workspace = true }
+api = { workspace = true }
+web-sys = { version = "0.3.70", features = ["Window", "Document", "HtmlDocument", "Storage"] }
+wasm-bindgen = "0.2"
+gloo-events = "0.1.2"
+axum = { version = "0.8", optional = true }
+tower-http = { version = "0.6", features = ["fs", "limit"], optional = true }
+dioxus-fullstack = { version = "0.7", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+image = { version = "0.24", optional = true }
+base64 = "0.22.1"
+gloo-net = "0.7.0"
+bytes = "1.11.1"
+lucide-dioxus = { version = "3.11.0", features = ["all-icons"] }
+gloo-timers = { version = "0.4.0", features = ["futures"] }
+tokio = { version = "1.0", features = ["fs", "rt", "macros"], optional = true }
+tokio-util = { version = "0.7", features = ["io"], optional = true }
+
+[features]
+default = []
+web = ["dioxus/web"]
+server = ["dioxus/server", "ui/server", "dep:axum", "dep:tower-http", "dep:dioxus-fullstack", "dep:serde", "dep:image", "dep:tokio", "dep:tokio-util"]

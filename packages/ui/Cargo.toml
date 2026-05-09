@@ -1,0 +1,16 @@
+[package]
+name = "ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dioxus = { workspace = true, features = ["router"] }
+api = { workspace = true }
+tokio = { version = "1.52.2", features = ["time"] }
+gloo-timers = { version = "0.4.0", features = ["futures"] }
+web-sys = { version = "0.3.97", features = ["Window", "Document", "Element", "DomRect", "KeyboardEvent", "HtmlElement"] }
+lucide-dioxus = { version = "3.11.0", features = ["all-icons"] }
+gloo-events = "0.3.0"
+
+[features]
+server = ["api/server"]

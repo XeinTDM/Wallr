@@ -1,0 +1,18 @@
+/* Web-specific global styles */
+main {
+    min-height: 100vh;
+}
+
+.section-header h2 {
+    letter-spacing: -0.02em;
+}
+
+/* Page transitions */
+.router-container {
+    animation: fadeIn 0.5s var(--transition-smooth);
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .5; transform: scale(1.2); }
+}
+

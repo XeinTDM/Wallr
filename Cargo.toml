@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/ui",
+    "packages/web",
+    "packages/desktop",
+    "packages/mobile",
+    "packages/api",
+]
+
+[workspace.dependencies]
+dioxus = { version = "0.7.9" }
+
+# workspace
+ui = { path = "packages/ui" }
+api = { path = "packages/api" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

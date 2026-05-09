@@ -1,0 +1,224 @@
+#navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  padding: 0.5rem 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nav-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.nav-left, .nav-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.nav-center {
+  flex: 0;
+  display: flex;
+  justify-content: center;
+  min-width: 400px;
+}
+
+.nav-right {
+  justify-content: flex-end;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: white;
+}
+
+.nav-search-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+  transition: all var(--transition-smooth);
+}
+
+.nav-search-container input {
+  width: 100%;
+}
+
+.nav-links {
+  display: flex;
+  gap: 24px;
+}
+
+.nav-links a, .nav-links span {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-links a:hover {
+  color: var(--text-primary);
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.btn-upload {
+  background: var(--accent-gradient);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.btn-settings {
+  font-size: 20px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  transition: var(--transition-smooth);
+}
+
+.btn-settings:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: rotate(30deg);
+}
+
+.btn-login {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 10px;
+  transition: var(--transition-smooth);
+}
+
+.btn-login:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent-primary);
+}
+
+/* Explore Dropdown */
+.explore-container {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.explore-trigger {
+  user-select: none;
+  transition: all 0.3s var(--transition-smooth);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.explore-trigger:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.explore-mega-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: -200px;
+  width: 900px;
+  background: rgba(15, 17, 23, 0.95) !important;
+  backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 0;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  z-index: 1001;
+  animation: dropdownEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.mega-row {
+  display: flex;
+}
+
+.mega-col {
+  flex: 1;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mega-col.separator {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mega-col h6 {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--accent-primary);
+  margin-bottom: 12px;
+}
+
+.explore-categories-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+}
+
+.mega-col a {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.mega-col a:hover {
+  color: var(--text-primary);
+  transform: translateX(4px);
+}
+
+@keyframes dropdownEnter {
+  from { 
+    opacity: 0; 
+    transform: translateY(10px) scale(0.98);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1);
+  }
+}
+
+.menu-item-hover:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menu-item-hover-danger:hover {
+  background: rgba(255, 77, 77, 0.1);
+}
+
+.search-clear-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1 !important;
+}
