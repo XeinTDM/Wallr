@@ -19,6 +19,8 @@ pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
             is_banned: r.is_banned,
+            active_playlist_id: r.active_playlist_id,
+            playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -42,6 +44,8 @@ pub async fn get_user_by_name(name: &str) -> anyhow::Result<Option<UserRecord>> 
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
             is_banned: r.is_banned,
+            active_playlist_id: r.active_playlist_id,
+            playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -70,6 +74,8 @@ pub async fn get_user_by_id(id: &str) -> anyhow::Result<Option<UserRecord>> {
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
             is_banned: r.is_banned,
+            active_playlist_id: r.active_playlist_id,
+            playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -82,8 +88,8 @@ pub async fn create_user(record: &UserRecord) -> anyhow::Result<()> {
     let pool = get_pool()?;
     sqlx::query!(
         r#"
-        INSERT INTO users (id, name, email, pfp_url, password_hash, banner_url, token_version, bio, social_links, role)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO users (id, name, email, pfp_url, password_hash, banner_url, token_version, bio, social_links, role, active_playlist_id, playlist_interval_secs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         "#,
         record.user.id,
         record.user.name,
@@ -94,7 +100,9 @@ pub async fn create_user(record: &UserRecord) -> anyhow::Result<()> {
         record.token_version,
         record.user.bio,
         record.user.social_links.as_ref().map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null)),
-        record.user.role
+        record.user.role,
+        record.user.active_playlist_id,
+        record.user.playlist_interval_secs
     )
     .execute(pool)
     .await?;
@@ -333,7 +341,7 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
     let search_pattern = format!("%{}%", query.to_lowercase());
 
     let rows = sqlx::query!(
-        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned FROM users WHERE LOWER(name) LIKE $1 LIMIT $2",
+        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs FROM users WHERE LOWER(name) LIKE $1 LIMIT $2",
         search_pattern,
         limit as i64
     )
@@ -352,6 +360,8 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
             is_banned: r.is_banned,
+            active_playlist_id: r.active_playlist_id,
+            playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
         })
         .collect();
 
@@ -429,6 +439,8 @@ pub async fn get_followers_db(
                 social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
                 role: r.role,
                 is_banned: r.is_banned,
+                active_playlist_id: r.active_playlist_id,
+                playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
             },
             password_hash: r.password_hash,
             token_version: r.token_version,
@@ -464,6 +476,8 @@ pub async fn get_following_db(
                 social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
                 role: r.role,
                 is_banned: r.is_banned,
+                active_playlist_id: r.active_playlist_id,
+                playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
             },
             password_hash: r.password_hash,
             token_version: r.token_version,
@@ -581,6 +595,8 @@ pub async fn get_recent_users_db(limit: u32) -> anyhow::Result<Vec<crate::User>>
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
             is_banned: r.is_banned,
+            active_playlist_id: r.active_playlist_id,
+            playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
         })
         .collect();
 
@@ -719,6 +735,28 @@ pub async fn consume_password_reset_token_db(
     sqlx::query!("DELETE FROM password_reset_tokens WHERE token = $1", token)
         .execute(pool)
         .await?;
+
+    Ok(())
+}
+
+pub async fn update_user_playlist(
+    user_id: &str,
+    collection_id: Option<&str>,
+    interval_secs: Option<i32>,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    
+    // First clear cache
+    get_user_cache().remove(user_id).await;
+
+    sqlx::query!(
+        "UPDATE users SET active_playlist_id = $1, playlist_interval_secs = COALESCE($2, playlist_interval_secs) WHERE id = $3",
+        collection_id,
+        interval_secs,
+        user_id
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

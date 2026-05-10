@@ -30,7 +30,7 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
     key: &'static str,
     default: T,
 ) -> Signal<T> {
-    let sig = use_signal(move || {
+    let mut sig = use_signal(move || {
         #[cfg(target_arch = "wasm32")]
         if let Some(win) = web_sys::window() {
             if let Ok(Some(storage)) = win.local_storage() {
@@ -44,6 +44,25 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
         default.clone()
     });
 
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use_effect(move || {
+            let mut eval = dioxus::document::eval(&format!(
+                "let val = localStorage.getItem('{}'); return val === null ? '' : val;",
+                key
+            ));
+            spawn(async move {
+                if let Ok(val) = eval.recv::<String>().await {
+                    if !val.is_empty() {
+                        if let Ok(parsed) = val.parse::<T>() {
+                            sig.set(parsed);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
     use_effect(move || {
         let val = sig();
         #[cfg(target_arch = "wasm32")]
@@ -54,6 +73,15 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
                     let _ = win.dispatch_event(&event);
                 }
             }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let script = format!(
+                "localStorage.setItem('{}', '{}'); window.dispatchEvent(new Event('local-storage-update'));",
+                key,
+                val.to_string()
+            );
+            let _ = dioxus::document::eval(&script);
         }
     });
 

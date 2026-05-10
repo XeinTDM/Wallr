@@ -414,7 +414,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                             to: Route::Settings {},
                             class: "glass edit-overlay-container",
                             style: "display: block; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; border: 4px solid var(--bg-primary); box-shadow: 0 10px 30px rgba(0,0,0,0.5);",
-                            img { src: "{crate::resolve_asset_url(&props.user.pfp_url)}", style: "width: 100%; height: 100%; object-fit: cover;" }
+                            img { referrerpolicy: "no-referrer", src: "{crate::resolve_asset_url(&props.user.pfp_url)}", style: "width: 100%; height: 100%; object-fit: cover;" }
                             div {
                                 class: "edit-overlay pfp-overlay",
                                 lucide_dioxus::Pen { size: 28, color: "white" }
@@ -424,7 +424,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                         div {
                             class: "glass",
                             style: "display: block; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; border: 4px solid var(--bg-primary); box-shadow: 0 10px 30px rgba(0,0,0,0.5);",
-                            img { src: "{crate::resolve_asset_url(&props.user.pfp_url)}", style: "width: 100%; height: 100%; object-fit: cover;" }
+                            img { referrerpolicy: "no-referrer", src: "{crate::resolve_asset_url(&props.user.pfp_url)}", style: "width: 100%; height: 100%; object-fit: cover;" }
                         }
                     }
 

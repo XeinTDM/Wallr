@@ -142,6 +142,8 @@ pub struct User {
     pub social_links: Option<std::collections::HashMap<String, String>>,
     pub role: String,
     pub is_banned: bool,
+    pub active_playlist_id: Option<String>,
+    pub playlist_interval_secs: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -387,148 +389,150 @@ pub async fn upload_raw_impl(
     bytes: Vec<u8>,
     is_private: bool,
 ) -> anyhow::Result<String> {
+    if crate::ai::TAGGER.get().is_none() {
+        return Err(anyhow::anyhow!(
+            "AI Tagger is still initializing, please try again in a few moments."
+        ));
+    }
+
     let original_bytes_len = bytes.len() as u64;
 
-    let (
-        id,
-        image_url,
-        thumbnail_url,
-        width,
-        height,
-        primary_colors,
-        tags,
-        img_opt,
-        is_live,
-        embedding,
-        phash_bytes,
-    ) = tokio::task::spawn_blocking(move || {
-        let is_mp4 = bytes.len() > 8 && &bytes[4..8] == b"ftyp";
-        let is_webm = bytes.len() > 4 && bytes[0..4] == [0x1A, 0x45, 0xDF, 0xA3];
-        let is_live = is_mp4 || is_webm;
+    let is_mp4 = bytes.len() > 8 && &bytes[4..8] == b"ftyp";
+    let is_webm = bytes.len() > 4 && bytes[0..4] == [0x1A, 0x45, 0xDF, 0xA3];
+    let is_live = is_mp4 || is_webm;
 
-        let id = blake3::hash(&bytes).to_hex().to_string();
+    let id = blake3::hash(&bytes).to_hex().to_string();
 
-        let (img, final_image_url) = if is_live {
-            let ext = if is_mp4 { "mp4" } else { "webm" };
-            let image_url = crate::storage::save_image_file(&id, "master", ext, &bytes)?;
+    let (img, image_url) = if is_live {
+        let ext = if is_mp4 { "mp4" } else { "webm" };
+        let image_url = tokio::task::spawn_blocking({
+            let id = id.clone();
+            let bytes = bytes.clone();
+            move || crate::storage::save_image_file(&id, "master", ext, &bytes)
+        })
+        .await??;
 
-            let temp_dir = std::env::temp_dir();
-            let video_path = temp_dir.join(format!("{}.{}", id, ext));
-            let thumb_path = temp_dir.join(format!("{}_thumb.jpg", id));
-            std::fs::write(&video_path, &bytes)?;
+        let temp_dir = std::env::temp_dir();
+        let video_path = temp_dir.join(format!("{}.{}", id, ext));
+        let thumb_path = temp_dir.join(format!("{}_thumb.jpg", id));
+        tokio::fs::write(&video_path, &bytes).await?;
 
-            let status = std::process::Command::new("ffmpeg")
-                .arg("-i")
-                .arg(&video_path)
-                .arg("-vframes")
-                .arg("1")
-                .arg("-q:v")
-                .arg("2")
-                .arg("-y")
-                .arg(&thumb_path)
-                .status()
-                .map_err(|e| anyhow::anyhow!("Failed to run ffmpeg: {}", e))?;
+        let status = tokio::process::Command::new("ffmpeg")
+            .arg("-i")
+            .arg(&video_path)
+            .arg("-vframes")
+            .arg("1")
+            .arg("-q:v")
+            .arg("2")
+            .arg("-y")
+            .arg(&thumb_path)
+            .status()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to run ffmpeg: {}", e))?;
 
-            if !status.success() {
-                return Err(anyhow::anyhow!("ffmpeg failed to extract frame"));
-            }
-
-            let thumb_bytes = std::fs::read(&thumb_path)?;
-            let img = ::image::load_from_memory(&thumb_bytes)
-                .map_err(|e| anyhow::anyhow!("Failed to decode thumbnail: {}", e))?;
-
-            let _ = std::fs::remove_file(video_path);
-            let _ = std::fs::remove_file(thumb_path);
-
-            (img, image_url)
-        } else {
-            let img = ::image::load_from_memory(&bytes)
-                .map_err(|e| anyhow::anyhow!("Failed to decode image: {}", e))?;
-            let image_url = crate::storage::save_image_file(&id, "master", "jpg", &bytes)?;
-            (img, image_url)
-        };
-
-        let (width, height) = (img.width(), img.height());
-
-        let hasher = img_hash::HasherConfig::new()
-            .hash_alg(img_hash::HashAlg::Gradient)
-            .to_hasher();
-            
-        let rgba = img.to_rgba8();
-        let img_for_hash = img_hash::image::RgbaImage::from_raw(img.width(), img.height(), rgba.into_raw())
-            .ok_or_else(|| anyhow::anyhow!("Failed to convert image for hashing"))?;
-        let phash = hasher.hash_image(&img_for_hash);
-        let phash_bytes = phash.as_bytes().to_vec();
-
-        let is_banned = tokio::runtime::Handle::current().block_on(crate::storage::check_banned_phash(&phash_bytes))?;
-        if is_banned {
-            return Err(anyhow::anyhow!(
-                "Upload rejected due to illegal content policy."
-            ));
+        if !status.success() {
+            return Err(anyhow::anyhow!("ffmpeg failed to extract frame"));
         }
 
-        let primary_colors = crate::processor::extract_dominant_colors(&img);
+        let thumb_bytes = tokio::fs::read(&thumb_path).await?;
+        let img = tokio::task::spawn_blocking(move || ::image::load_from_memory(&thumb_bytes))
+            .await?
+            .map_err(|e| anyhow::anyhow!("Failed to decode thumbnail: {}", e))?;
 
-        let (mut tags, embedding, is_nsfw) = if let Some(tagger) = crate::ai::TAGGER.get() {
-            tagger
-                .tag_image(&img)
-                .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512], false))
-        } else {
-            (vec!["misc".to_string()], vec![0.0; 512], false)
-        };
+        let _ = tokio::fs::remove_file(video_path).await;
+        let _ = tokio::fs::remove_file(thumb_path).await;
 
-        if is_nsfw && !tags.contains(&"nsfw".to_string()) {
-            tags.push("nsfw".to_string());
+        (img, image_url)
+    } else {
+        let image_url = tokio::task::spawn_blocking({
+            let id = id.clone();
+            let bytes = bytes.clone();
+            move || crate::storage::save_image_file(&id, "master", "jpg", &bytes)
+        })
+        .await??;
+        let img = tokio::task::spawn_blocking({
+            let bytes = bytes.clone();
+            move || ::image::load_from_memory(&bytes)
+        })
+        .await?
+        .map_err(|e| anyhow::anyhow!("Failed to decode image: {}", e))?;
+        (img, image_url)
+    };
+
+    let (width, height) = (img.width(), img.height());
+
+    let (phash_bytes, primary_colors, mut tags, embedding, is_nsfw, thumbnail_url, img_opt) = tokio::task::spawn_blocking({
+        let id = id.clone();
+        let img = img.clone();
+        move || -> anyhow::Result<_> {
+            let hasher = img_hash::HasherConfig::new()
+                .hash_alg(img_hash::HashAlg::Gradient)
+                .to_hasher();
+
+            let rgba = img.to_rgba8();
+            let img_for_hash = img_hash::image::RgbaImage::from_raw(img.width(), img.height(), rgba.into_raw())
+                .ok_or_else(|| anyhow::anyhow!("Failed to convert image for hashing"))?;
+            let phash = hasher.hash_image(&img_for_hash);
+            let phash_bytes = phash.as_bytes().to_vec();
+
+            let primary_colors = crate::processor::extract_dominant_colors(&img);
+
+            let (tags, embedding, is_nsfw) = if let Some(tagger) = crate::ai::TAGGER.get() {
+                tagger
+                    .tag_image(&img)
+                    .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512], false))
+            } else {
+                (vec!["misc".to_string()], vec![0.0; 512], false)
+            };
+
+            let thumb_data = crate::processor::generate_thumbnail(&img, 800);
+            let thumbnail_url = crate::storage::save_image_file(&id, "thumb", "jpg", &thumb_data)?;
+
+            let final_img_opt = if is_live { None } else { Some(img) };
+
+            Ok((phash_bytes, primary_colors, tags, embedding, is_nsfw, thumbnail_url, final_img_opt))
         }
-
-        for ut in user_tags {
-            if !tags.contains(&ut) {
-                tags.push(ut);
-            }
-        }
-
-        if is_live && !tags.contains(&"live".to_string()) {
-            tags.push("live".to_string());
-        }
-
-        if width >= 7680 && height >= 4320 {
-            if !tags.contains(&"8k".to_string()) {
-                tags.push("8k".to_string());
-            }
-        } else if width >= 3840 && height >= 2160 {
-            if !tags.contains(&"4k".to_string()) {
-                tags.push("4k".to_string());
-            }
-        } else if width >= 2560 && height >= 1440 {
-            if !tags.contains(&"2k".to_string()) {
-                tags.push("2k".to_string());
-            }
-        } else if width >= 1920 && height >= 1080 {
-            if !tags.contains(&"hd".to_string()) {
-                tags.push("hd".to_string());
-            }
-        }
-
-        let thumb_data = crate::processor::generate_thumbnail(&img, 800);
-        let thumbnail_url = crate::storage::save_image_file(&id, "thumb", "jpg", &thumb_data)?;
-
-        let final_img_opt = if is_live { None } else { Some(img) };
-
-        Ok::<_, anyhow::Error>((
-            id,
-            final_image_url,
-            thumbnail_url,
-            width,
-            height,
-            primary_colors,
-            tags,
-            final_img_opt,
-            is_live,
-            embedding,
-            phash_bytes,
-        ))
     })
     .await??;
+
+    let is_banned = crate::storage::check_banned_phash(&phash_bytes).await?;
+    if is_banned {
+        return Err(anyhow::anyhow!(
+            "Upload rejected due to illegal content policy."
+        ));
+    }
+
+    if is_nsfw && !tags.contains(&"nsfw".to_string()) {
+        tags.push("nsfw".to_string());
+    }
+
+    for ut in user_tags {
+        if !tags.contains(&ut) {
+            tags.push(ut);
+        }
+    }
+
+    if is_live && !tags.contains(&"live".to_string()) {
+        tags.push("live".to_string());
+    }
+
+    if width >= 7680 && height >= 4320 {
+        if !tags.contains(&"8k".to_string()) {
+            tags.push("8k".to_string());
+        }
+    } else if width >= 3840 && height >= 2160 {
+        if !tags.contains(&"4k".to_string()) {
+            tags.push("4k".to_string());
+        }
+    } else if width >= 2560 && height >= 1440 {
+        if !tags.contains(&"2k".to_string()) {
+            tags.push("2k".to_string());
+        }
+    } else if width >= 1920 && height >= 1080 {
+        if !tags.contains(&"hd".to_string()) {
+            tags.push("hd".to_string());
+        }
+    }
 
     let wallpaper = Wallpaper {
         id: id.clone(),
@@ -743,21 +747,21 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
     let mut hasher = Sha256::new();
     hasher.update(email.as_bytes());
     let email_hash = format!("{:x}", hasher.finalize());
-    let pfp_url = format!(
-        "https://www.gravatar.com/avatar/{}?s=256&d=retro",
-        email_hash
-    );
 
     let new_user = User {
-        id: Uuid::new_v4().to_string(),
-        name: name.clone(),
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
         email,
-        pfp_url,
+        pfp_url: format!("https://api.dicebear.com/7.x/avataaars/svg?seed={}", 
+            uuid::Uuid::new_v4().to_string()
+        ),
         banner_url: None,
         bio: None,
         social_links: None,
         role: "user".to_string(),
         is_banned: false,
+        active_playlist_id: None,
+        playlist_interval_secs: 3600,
     };
 
     let record = UserRecord {
@@ -819,12 +823,12 @@ pub async fn get_user_favorites(
 }
 
 #[server]
-pub async fn get_all_user_favorite_ids() -> Result<Vec<String>, ServerFnError> {
+pub async fn check_favorites(wallpaper_ids: Vec<String>) -> Result<Vec<String>, ServerFnError> {
     let user = match require_auth().await {
         Ok(u) => u,
         Err(_) => return Ok(vec![]),
     };
-    crate::storage::get_all_user_favorite_ids(&user.id)
+    crate::storage::check_favorites_db(&user.id, &wallpaper_ids)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -1588,4 +1592,36 @@ pub async fn get_following(
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
     Ok(following.into_iter().map(|u| u.user).collect())
+}
+
+#[server]
+pub async fn set_active_playlist(
+    collection_id: Option<String>,
+    interval_secs: Option<i32>,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::users::update_user_playlist(&user.id, collection_id.as_deref(), interval_secs)
+        .await
+        .map_err(|e| ServerFnError::new(e))?;
+    Ok(())
+}
+
+#[server]
+pub async fn get_active_playlist_items() -> Result<(Vec<Wallpaper>, i32), ServerFnError> {
+    let user = require_auth().await?;
+    let db_user = crate::storage::users::get_user_by_id(&user.id)
+        .await
+        .map_err(|e| ServerFnError::new(e))?;
+    
+    let db_user = db_user.ok_or_else(|| ServerFnError::new("User not found"))?;
+    let interval = db_user.user.playlist_interval_secs;
+    
+    if let Some(col_id) = db_user.user.active_playlist_id {
+        let items = crate::storage::collections::get_collection_wallpapers_db(&col_id, 0, 100)
+            .await
+            .map_err(|e| ServerFnError::new(e))?;
+        Ok((items.to_vec(), interval))
+    } else {
+        Ok((vec![], interval))
+    }
 }

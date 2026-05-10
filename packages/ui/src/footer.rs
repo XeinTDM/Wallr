@@ -14,7 +14,7 @@ pub struct FooterProps<R: Routable + Clone + PartialEq + 'static> {
 
 #[component]
 pub fn Footer<R: Routable + Clone + PartialEq + 'static>(props: FooterProps<R>) -> Element {
-    let mut i18n = crate::i18n::use_i18n();
+    let i18n = crate::i18n::use_i18n();
 
     rsx! {
         document::Stylesheet { href: FOOTER_CSS }
@@ -60,27 +60,12 @@ pub fn Footer<R: Routable + Clone + PartialEq + 'static>(props: FooterProps<R>) 
                 }
                 div {
                     class: "footer-bottom",
-                    style: "display: flex; justify-content: space-between; align-items: center; width: 100%;",
+                    style: "display: flex; justify-content: center; align-items: center; width: 100%;",
                     p {
                         "© 2026 WALLR. {i18n.t(\"built_with\")}"
                         span { style: "color: var(--accent-secondary); font-weight: 600;", "Dioxus" }
                         "{i18n.t(\"and\")}"
                         span { style: "color: #ff4d4d;", "❤️" }
-                    }
-                    div {
-                        style: "display: flex; gap: 12px; align-items: center;",
-                        button {
-                            class: "glass glow-hover",
-                            style: if i18n.get_lang() == crate::i18n::Language::English { "padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent-primary); color: white; background: rgba(255,255,255,0.1); cursor: pointer;" } else { "padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); background: transparent; cursor: pointer;" },
-                            onclick: move |_| i18n.set_lang(crate::i18n::Language::English),
-                            "EN"
-                        }
-                        button {
-                            class: "glass glow-hover",
-                            style: if i18n.get_lang() == crate::i18n::Language::Spanish { "padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent-primary); color: white; background: rgba(255,255,255,0.1); cursor: pointer;" } else { "padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); background: transparent; cursor: pointer;" },
-                            onclick: move |_| i18n.set_lang(crate::i18n::Language::Spanish),
-                            "ES"
-                        }
                     }
                 }
             }

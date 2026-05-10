@@ -9,6 +9,7 @@ pub fn CollectionDetail(id: String) -> Element {
     let mut page = use_signal(|| 0_u32);
     let mut current_id = use_signal(|| id.clone());
     let mut is_add_modal_open = use_signal(|| false);
+    let mut is_sync_modal_open = use_signal(|| false);
 
     if *current_id.peek() != id {
         current_id.set(id.clone());
@@ -42,11 +43,21 @@ pub fn CollectionDetail(id: String) -> Element {
                     div {
                         style: "display: flex; justify-content: space-between; align-items: center;",
                         h1 { style: "font-size: 32px; font-weight: 900; margin: 0;", "{i18n.t(\"col_detail_title\")}" }
-                        button {
-                            class: "glow-hover",
-                            style: "padding: 10px 24px; background: var(--accent-primary); border-radius: 12px; color: white; font-weight: 600; border: none; cursor: pointer;",
-                            onclick: move |_| is_add_modal_open.set(true),
-                            "{i18n.t(\"col_detail_add_btn\")}"
+                        div {
+                            style: "display: flex; gap: 16px;",
+                            button {
+                                class: "glow-hover",
+                                style: "padding: 10px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; color: white; font-weight: 600; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; display: flex; align-items: center; gap: 8px;",
+                                onclick: move |_| is_sync_modal_open.set(true),
+                                lucide_dioxus::Monitor { size: 18 }
+                                "Sync to Desktop"
+                            }
+                            button {
+                                class: "glow-hover",
+                                style: "padding: 10px 24px; background: var(--accent-primary); border-radius: 12px; color: white; font-weight: 600; border: none; cursor: pointer;",
+                                onclick: move |_| is_add_modal_open.set(true),
+                                "{i18n.t(\"col_detail_add_btn\")}"
+                            }
                         }
                     }
                 }
@@ -106,6 +117,10 @@ pub fn CollectionDetail(id: String) -> Element {
                 on_added: move |_| {
                     wallpapers.restart();
                 }
+            }
+            SyncModal {
+                is_open: is_sync_modal_open,
+                collection_id: current_id(),
             }
         }
     }
@@ -249,6 +264,76 @@ fn AddFromUploadsModal(
                                 crate::LoadingScreen {}
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SyncModal(is_open: Signal<bool>, collection_id: String) -> Element {
+    let mut interval = use_signal(|| 3600);
+    let mut is_submitting = use_signal(|| false);
+
+    if !is_open() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "modal-overlay fade-in",
+            style: "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 1000; display: flex; align-items: center; justify-content: center;",
+            onclick: move |e| {
+                e.stop_propagation();
+                is_open.set(false);
+            },
+            div {
+                class: "glass slide-up",
+                style: "width: 90%; max-width: 400px; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);",
+                onclick: move |e| e.stop_propagation(),
+
+                h2 { style: "margin: 0; font-size: 24px; font-weight: 800;", "Sync to Desktop" }
+                p { style: "color: var(--text-muted); margin: 0;", "Your desktop app will automatically rotate wallpapers from this collection." }
+
+                div {
+                    style: "display: flex; flex-direction: column; gap: 8px;",
+                    label { style: "font-weight: 600; font-size: 14px;", "Rotation Interval" }
+                    select {
+                        style: "padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; outline: none;",
+                        onchange: move |e| {
+                            if let Ok(val) = e.value().parse() {
+                                interval.set(val);
+                            }
+                        },
+                        option { value: "300", "5 Minutes" }
+                        option { value: "900", "15 Minutes" }
+                        option { value: "3600", selected: true, "1 Hour" }
+                        option { value: "86400", "24 Hours" }
+                    }
+                }
+
+                div {
+                    style: "display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;",
+                    button {
+                        style: "padding: 10px 20px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: white; cursor: pointer;",
+                        onclick: move |_| is_open.set(false),
+                        "Cancel"
+                    }
+                    button {
+                        class: "glow-hover",
+                        style: "padding: 10px 20px; background: var(--accent-primary); border: none; border-radius: 12px; color: white; font-weight: 600; cursor: pointer;",
+                        disabled: is_submitting(),
+                        onclick: move |_| {
+                            let cid = collection_id.clone();
+                            is_submitting.set(true);
+                            spawn(async move {
+                                let _ = api::set_active_playlist(Some(cid), Some(interval())).await;
+                                is_submitting.set(false);
+                                is_open.set(false);
+                            });
+                        },
+                        if is_submitting() { "Saving..." } else { "Start Sync" }
                     }
                 }
             }

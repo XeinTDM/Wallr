@@ -581,6 +581,8 @@ pub fn translate(key: &str) -> Option<&'static str> {
         "appr_theme_display" => Some("Tema y Pantalla"),
         "appr_theme_interface" => Some("Interfaz de Tema"),
         "appr_theme_desc" => Some("Selecciona tu estilo visual preferido."),
+        "appr_language" => Some("Idioma"),
+        "appr_language_desc" => Some("Selecciona tu idioma de aplicación preferido."),
         "appr_animations" => Some("Animaciones de UI"),
         "appr_animations_desc" => Some("Activar transiciones suaves y microanimaciones."),
         "acc_profile_settings" => Some("Ajustes de Perfil"),

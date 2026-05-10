@@ -165,34 +165,110 @@ pub async fn load_all_wallpapers(
         return Ok(cached);
     }
 
-    let pool = get_pool()?;
-    let offset = page * limit;
+    let cursor_cache = super::cache::get_cursor_cache();
+    let prev_cursor_key = if page > 0 {
+        Some(format!("cursor:all:{}:{}:{:?}", page - 1, limit, filters))
+    } else {
+        None
+    };
 
+    let mut cursor = None;
+    if let Some(key) = &prev_cursor_key {
+        cursor = cursor_cache.get(key).await;
+    }
+
+    let pool = get_pool()?;
     let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE 1=1");
     apply_filters(&mut q, &filters);
 
+    let mut use_offset = false;
+
+    if let Some(c) = cursor {
+        let parts: Vec<&str> = c.split(',').collect();
+        if parts.len() == 2 {
+            let val = parts[0];
+            let id = parts[1];
+            match filters.sort.as_str() {
+                "downloads" => {
+                    let downloads: i64 = val.parse().unwrap_or(0);
+                    q.push(" AND (downloads, id) <= (");
+                    q.push_bind(downloads);
+                    q.push(", ");
+                    q.push_bind(id.to_string());
+                    q.push(")");
+                }
+                "rating" => {
+                    let likes: i64 = val.parse().unwrap_or(0);
+                    q.push(" AND (likes, id) <= (");
+                    q.push_bind(likes);
+                    q.push(", ");
+                    q.push_bind(id.to_string());
+                    q.push(")");
+                }
+                "date" | _ => {
+                    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                        q.push(" AND (created_at, id) <= (");
+                        q.push_bind(date.with_timezone(&chrono::Utc));
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
+                }
+            }
+        }
+    } else if page > 0 {
+        use_offset = true;
+    }
+
     match filters.sort.as_str() {
         "downloads" => {
-            q.push(" ORDER BY downloads DESC");
+            q.push(" ORDER BY downloads DESC, id DESC");
         }
         "rating" => {
-            q.push(" ORDER BY likes DESC");
+            q.push(" ORDER BY likes DESC, id DESC");
         }
         "date" | _ => {
-            q.push(" ORDER BY created_at DESC");
+            q.push(" ORDER BY created_at DESC, id DESC");
         }
     }
 
     q.push(" LIMIT ");
-    q.push_bind(limit as i64);
-    q.push(" OFFSET ");
-    q.push_bind(offset as i64);
+    q.push_bind((limit + 1) as i64);
+
+    if use_offset {
+        q.push(" OFFSET ");
+        q.push_bind((page * limit) as i64);
+    }
 
     let rows = q.build().fetch_all(pool).await?;
+    let mut results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
+    
+    let mut next_cursor = None;
+    if results.len() > limit as usize {
+        results.pop(); // Remove the extra item
+        if let Some(last) = results.last() {
+            match filters.sort.as_str() {
+                "downloads" => {
+                    next_cursor = Some(format!("{},{}", last.downloads, last.id));
+                }
+                "rating" => {
+                    next_cursor = Some(format!("{},{}", last.likes, last.id));
+                }
+                "date" | _ => {
+                    next_cursor = Some(format!("{},{}", last.created_at.to_rfc3339(), last.id));
+                }
+            }
+        }
+    }
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
     let arc_results = std::sync::Arc::new(results);
     cache.insert(cache_key, arc_results.clone()).await;
+
+    if let Some(nc) = next_cursor {
+        let current_cursor_key = format!("cursor:all:{}:{}:{:?}", page, limit, filters);
+        cursor_cache.insert(current_cursor_key, nc).await;
+    }
+
     Ok(arc_results)
 }
 
@@ -241,36 +317,114 @@ pub async fn get_wallpapers_by_tag(
         return Ok(cached);
     }
 
+    let cursor_cache = super::cache::get_cursor_cache();
+    let prev_cursor_key = if page > 0 {
+        Some(format!("cursor:tag:{}:{}:{}:{:?}", tag, page - 1, limit, filters))
+    } else {
+        None
+    };
+
+    let mut cursor = None;
+    if let Some(key) = &prev_cursor_key {
+        cursor = cursor_cache.get(key).await;
+    }
+
     let pool = get_pool()?;
     let tag_json = serde_json::json!(tag);
-    let offset = page * limit;
 
     let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE tags @> ");
     q.push_bind(tag_json);
     apply_filters(&mut q, &filters);
 
+    let mut use_offset = false;
+
+    if let Some(c) = cursor {
+        let parts: Vec<&str> = c.split(',').collect();
+        if parts.len() == 2 {
+            let val = parts[0];
+            let id = parts[1];
+            match filters.sort.as_str() {
+                "downloads" => {
+                    let downloads: i64 = val.parse().unwrap_or(0);
+                    q.push(" AND (downloads, id) <= (");
+                    q.push_bind(downloads);
+                    q.push(", ");
+                    q.push_bind(id.to_string());
+                    q.push(")");
+                }
+                "rating" => {
+                    let likes: i64 = val.parse().unwrap_or(0);
+                    q.push(" AND (likes, id) <= (");
+                    q.push_bind(likes);
+                    q.push(", ");
+                    q.push_bind(id.to_string());
+                    q.push(")");
+                }
+                "date" | _ => {
+                    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                        q.push(" AND (created_at, id) <= (");
+                        q.push_bind(date.with_timezone(&chrono::Utc));
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
+                }
+            }
+        }
+    } else if page > 0 {
+        use_offset = true;
+    }
+
     match filters.sort.as_str() {
         "downloads" => {
-            q.push(" ORDER BY downloads DESC");
+            q.push(" ORDER BY downloads DESC, id DESC");
         }
         "rating" => {
-            q.push(" ORDER BY likes DESC");
+            q.push(" ORDER BY likes DESC, id DESC");
         }
         "date" | _ => {
-            q.push(" ORDER BY created_at DESC");
+            q.push(" ORDER BY created_at DESC, id DESC");
         }
     }
 
     q.push(" LIMIT ");
-    q.push_bind(limit as i64);
-    q.push(" OFFSET ");
-    q.push_bind(offset as i64);
+    q.push_bind((limit + 1) as i64);
+
+    if use_offset {
+        q.push(" OFFSET ");
+        q.push_bind((page * limit) as i64);
+    }
 
     let rows = q.build().fetch_all(pool).await?;
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
+    let mut results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
+    
+    let mut next_cursor = None;
+    if results.len() > limit as usize {
+        results.pop(); // Remove the extra item
+        if let Some(last) = results.last() {
+            match filters.sort.as_str() {
+                "downloads" => {
+                    next_cursor = Some(format!("{},{}", last.downloads, last.id));
+                }
+                "rating" => {
+                    next_cursor = Some(format!("{},{}", last.likes, last.id));
+                }
+                "date" | _ => {
+                    next_cursor = Some(format!("{},{}", last.created_at.to_rfc3339(), last.id));
+                }
+            }
+        }
+    }
+
     let arc_results = std::sync::Arc::new(results);
     cache.insert(cache_key, arc_results.clone()).await;
+
+    if let Some(nc) = next_cursor {
+        let current_cursor_key = format!("cursor:tag:{}:{}:{}:{:?}", tag, page, limit, filters);
+        cursor_cache.insert(current_cursor_key, nc).await;
+    }
+
     Ok(arc_results)
 }
 
@@ -352,14 +506,20 @@ pub async fn get_user_favorites(
     Ok(arc_results)
 }
 
-pub async fn get_all_user_favorite_ids(user_id: &str) -> anyhow::Result<Vec<String>> {
+pub async fn check_favorites_db(user_id: &str, wallpaper_ids: &[String]) -> anyhow::Result<Vec<String>> {
+    if wallpaper_ids.is_empty() {
+        return Ok(Vec::new());
+    }
     let pool = get_pool()?;
+    
+    // Convert Vec<String> to a postgres array
     let rows = sqlx::query!(
         r#"
         SELECT wallpaper_id FROM user_favorites
-        WHERE user_id = $1
+        WHERE user_id = $1 AND wallpaper_id = ANY($2)
         "#,
-        user_id
+        user_id,
+        wallpaper_ids as &[String]
     )
     .fetch_all(pool)
     .await?;
@@ -424,12 +584,14 @@ pub async fn get_user_uploads(
 pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Result<bool> {
     let pool = get_pool()?;
 
+    let mut tx = pool.begin().await?;
+
     let exists: Option<i32> = sqlx::query_scalar!(
         "SELECT 1 as result FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2",
         user_id,
         wallpaper_id
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?
     .flatten();
 
@@ -439,15 +601,17 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
             user_id,
             wallpaper_id
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query!(
             "UPDATE wallpapers SET likes = likes - 1 WHERE id = $1",
             wallpaper_id
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+        tx.commit().await?;
 
         super::cache::get_wallpaper_cache()
             .remove(wallpaper_id)
@@ -461,15 +625,17 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
             user_id,
             wallpaper_id
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query!(
             "UPDATE wallpapers SET likes = likes + 1 WHERE id = $1",
             wallpaper_id
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+        tx.commit().await?;
 
         super::cache::get_wallpaper_cache()
             .remove(wallpaper_id)

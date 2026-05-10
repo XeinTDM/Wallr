@@ -43,6 +43,8 @@ fn main() {
                             <html>
                             <head>
                                 <title>Wallr</title>
+                                <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+                                <style>body { margin: 0 !important; padding: 0 !important; }</style>
                             </head>
                             <body>
                                 <div id="main"></div>
@@ -165,6 +167,27 @@ fn App() -> Element {
             _hotkey_manager.set(Some(manager));
 
             spawn(async move {
+                let mut last_sync: Option<std::time::Instant> = None;
+                loop {
+                    if let Ok((playlist, interval_secs)) = api::get_active_playlist_items().await {
+                        let should_sync = match last_sync {
+                            None => true,
+                            Some(sync) => sync.elapsed().as_secs() >= interval_secs as u64,
+                        };
+
+                        if !playlist.is_empty() && should_sync {
+                            last_sync = Some(std::time::Instant::now());
+                            let mut rng = rand::thread_rng();
+                            if let Some(wp) = playlist.choose(&mut rng) {
+                                apply_wallpaper(wp.clone()).await;
+                            }
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                }
+            });
+
+            spawn(async move {
                 let menu_channel = muda::MenuEvent::receiver();
                 let tray_channel = TrayIconEvent::receiver();
                 let hotkey_channel = GlobalHotKeyEvent::receiver();
@@ -204,34 +227,21 @@ fn App() -> Element {
 
                     if let Ok(event) = hotkey_channel.try_recv() {
                         if event.id == id_w || event.id == id_right || event.id == id_left {
-                            if let Ok(favs) = api::get_user_favorites(0, 100).await {
-                                if !favs.is_empty() {
-                                    let mut rng = rand::thread_rng();
-                                    if let Some(wp) = favs.choose(&mut rng) {
-                                        let image_url = wp.image_url.clone();
-                                        let wp_id = wp.id.clone();
-                                        let _ = tokio::task::spawn_blocking(move || {
-                                            let filename = image_url
-                                                .strip_prefix("/assets/uploads/")
-                                                .unwrap_or(&image_url);
-                                            let full_path = std::path::PathBuf::from(env!(
-                                                "CARGO_MANIFEST_DIR"
-                                            ))
-                                            .join("../ui/assets/uploads")
-                                            .join(filename);
-                                            if let Ok(img) = image::open(&full_path) {
-                                                let temp_dir = std::env::temp_dir();
-                                                let temp_path =
-                                                    temp_dir.join(format!("wallr_{}.jpg", wp_id));
-                                                if img.save(&temp_path).is_ok() {
-                                                    let _ = wallpaper::set_from_path(
-                                                        temp_path.to_str().unwrap(),
-                                                    );
-                                                }
-                                            }
-                                        })
-                                        .await;
-                                    }
+                            // Try active playlist first, fallback to favorites
+                            let mut candidates = vec![];
+                            if let Ok((playlist, _)) = api::get_active_playlist_items().await {
+                                candidates = playlist;
+                            }
+                            if candidates.is_empty() {
+                                if let Ok(favs) = api::get_user_favorites(0, 100).await {
+                                    candidates = favs.to_vec();
+                                }
+                            }
+
+                            if !candidates.is_empty() {
+                                let mut rng = rand::thread_rng();
+                                if let Some(wp) = candidates.choose(&mut rng) {
+                                    apply_wallpaper(wp.clone()).await;
                                 }
                             }
                         } else if event.id == id_h {
@@ -295,4 +305,26 @@ fn App() -> Element {
 
         Router::<Route> {}
     }
+}
+
+#[cfg(feature = "desktop")]
+async fn apply_wallpaper(wp: api::Wallpaper) {
+    let image_url = wp.image_url.clone();
+    let wp_id = wp.id.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        let filename = image_url
+            .strip_prefix("/assets/uploads/")
+            .unwrap_or(&image_url);
+        let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../ui/assets/uploads")
+            .join(filename);
+        if let Ok(img) = image::open(&full_path) {
+            let temp_dir = std::env::temp_dir();
+            let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
+            if img.save(&temp_path).is_ok() {
+                let _ = wallpaper::set_from_path(temp_path.to_str().unwrap());
+            }
+        }
+    })
+    .await;
 }

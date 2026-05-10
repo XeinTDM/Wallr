@@ -94,6 +94,7 @@ pub fn AccountSettings(
                             style: "width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--bg-primary); background: var(--bg-secondary); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center;",
                             class: "glow-hover",
                             img {
+                                referrerpolicy: "no-referrer",
                                 src: "{crate::resolve_asset_url(&real_pfp_url)}",
                                 style: "width: 100%; height: 100%; object-fit: cover; opacity: 0.5;"
                             }

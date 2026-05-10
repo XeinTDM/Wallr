@@ -214,6 +214,7 @@ fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<Str
                 div {
                     style: "display: flex; align-items: center; gap: 12px;",
                     img {
+                        referrerpolicy: "no-referrer",
                         src: "{crate::resolve_asset_url(&user.pfp_url)}",
                         style: "width: 36px; height: 36px; border-radius: 50%; object-fit: cover;"
                     }

@@ -463,6 +463,8 @@ pub fn translate(key: &str) -> Option<&'static str> {
         "appr_theme_display" => Some("Theme & Display"),
         "appr_theme_interface" => Some("Theme Interface"),
         "appr_theme_desc" => Some("Select your preferred visual style."),
+        "appr_language" => Some("Language"),
+        "appr_language_desc" => Some("Select your preferred application language."),
         "appr_animations" => Some("UI Animations"),
         "appr_animations_desc" => Some("Enable smooth transitions and micro-animations."),
         "acc_profile_settings" => Some("Profile Settings"),

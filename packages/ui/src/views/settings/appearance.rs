@@ -6,12 +6,34 @@ use lucide_dioxus::Palette;
 pub fn AppearanceSettings() -> Element {
     let mut theme = use_stored_signal("settings_theme", "dark".to_string());
     let mut animations = use_stored_signal("settings_animations", true);
-    let i18n = crate::i18n::use_i18n();
+    let mut i18n = crate::i18n::use_i18n();
 
     rsx! {
         div {
             class: "settings-card fade-in",
             h2 { Palette { size: 20 } "{i18n.t(\"appr_theme_display\")}" }
+
+            div { class: "setting-group",
+                div { class: "setting-info",
+                    h3 { "{i18n.t(\"appr_language\")}" }
+                    p { "{i18n.t(\"appr_language_desc\")}" }
+                }
+                div { class: "setting-control",
+                    select {
+                        class: "setting-select",
+                        value: if i18n.get_lang() == crate::i18n::Language::English { "en" } else { "es" },
+                        onchange: move |e| {
+                            if e.value() == "en" {
+                                i18n.set_lang(crate::i18n::Language::English);
+                            } else {
+                                i18n.set_lang(crate::i18n::Language::Spanish);
+                            }
+                        },
+                        option { value: "en", "English" }
+                        option { value: "es", "Español" }
+                    }
+                }
+            }
 
             div { class: "setting-group",
                 div { class: "setting-info",

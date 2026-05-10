@@ -80,8 +80,6 @@ async fn oauth_login(Path(provider): Path<String>) -> impl IntoResponse {
         }))
         .url();
 
-    // Ideally store csrf_token in a cookie or session to verify in callback.
-
     Redirect::to(auth_url.as_ref())
 }
 
@@ -143,7 +141,6 @@ async fn oauth_callback(
     let email = match user_info.email {
         Some(e) => e,
         None => {
-            // Github might require a separate request to /user/emails
             if provider == "github" {
                 let email_res = req_client
                     .get("https://api.github.com/user/emails")
@@ -220,22 +217,19 @@ async fn oauth_callback(
         pfp_url
     };
 
-    // Check if the user already exists by email
     let user_record = crate::storage::get_user_by_email(&email)
         .await
         .unwrap_or(None);
 
     let user = if let Some(mut existing_user) = user_record {
-        // User exists, maybe link the account if not already linked
         crate::storage::link_oauth_account(&existing_user.user.id, &provider, &provider_id)
             .await
             .ok();
         existing_user.user
     } else {
-        // Create new user
         use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
         let salt = SaltString::generate(&mut OsRng);
-        let random_pass = Uuid::new_v4().to_string(); // They will login via oauth anyway
+        let random_pass = Uuid::new_v4().to_string();
         let password_hash = argon2::Argon2::default()
             .hash_password(random_pass.as_bytes(), &salt)
             .map(|hash| hash.to_string())
@@ -251,6 +245,8 @@ async fn oauth_callback(
             social_links: None,
             role: "user".to_string(),
             is_banned: false,
+            active_playlist_id: None,
+            playlist_interval_secs: 3600,
         };
 
         let record = crate::UserRecord {
@@ -270,7 +266,6 @@ async fn oauth_callback(
         new_user
     };
 
-    // Generate token
     let record = crate::storage::get_user_by_email(&user.email)
         .await
         .unwrap_or(None)

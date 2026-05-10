@@ -138,6 +138,7 @@ pub fn Hero() -> Element {
                                         class: "menu-item-hover",
                                         onclick: move |_| _query.set(String::new()),
                                         img {
+                                            referrerpolicy: "no-referrer",
                                             src: "{crate::resolve_asset_url(&user.pfp_url)}",
                                             style: "width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);"
                                         }

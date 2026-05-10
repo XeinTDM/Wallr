@@ -135,6 +135,7 @@ fn UserListItem(props: UserListItemProps) -> Element {
             style: "display: flex; align-items: center; padding: 12px; border-radius: 12px; text-decoration: none; border: 1px solid transparent; transition: all 0.2s;",
             onclick: move |e| props.on_click.call(e),
             img {
+                referrerpolicy: "no-referrer",
                 src: "{crate::resolve_asset_url(&user.pfp_url)}",
                 style: "width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.05); margin-right: 16px;"
             }

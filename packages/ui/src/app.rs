@@ -84,12 +84,10 @@ pub fn AppNavbar() -> Element {
     let _auth_resource = use_resource(move || async move {
         if let Ok(Some(u)) = api::get_current_user().await {
             user.set(AuthState::Authenticated(u));
-            if let Ok(ids) = api::get_all_user_favorite_ids().await {
-                *crate::FAVORITED_IDS.write() = std::collections::HashSet::from_iter(ids);
-            }
         } else {
             user.set(AuthState::Unauthenticated);
             crate::FAVORITED_IDS.write().clear();
+            crate::CHECKED_FAVORITES_IDS.write().clear();
         }
     });
 

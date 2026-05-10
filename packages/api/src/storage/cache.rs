@@ -105,7 +105,19 @@ pub fn get_comment_rate_limit_cache() -> Cache<String, u32> {
         .get_or_init(|| {
             Cache::builder()
                 .max_capacity(10000)
-                .time_to_live(Duration::from_secs(60)) // 1 minute window
+                .time_to_live(Duration::from_secs(60))
+                .build()
+        })
+        .clone()
+}
+
+pub fn get_cursor_cache() -> Cache<String, String> {
+    static CACHE: OnceLock<Cache<String, String>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            Cache::builder()
+                .max_capacity(1000)
+                .time_to_live(Duration::from_secs(15 * 60))
                 .build()
         })
         .clone()

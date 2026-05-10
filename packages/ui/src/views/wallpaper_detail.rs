@@ -730,7 +730,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
             if let crate::app::AuthState::Authenticated(u) = is_auth() {
                 div {
                     style: "display: flex; gap: 16px; margin-bottom: 32px;",
-                    img { src: "{crate::resolve_asset_url(&u.pfp_url)}", style: "width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" }
+                    img { referrerpolicy: "no-referrer", src: "{crate::resolve_asset_url(&u.pfp_url)}", style: "width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" }
                     div {
                         style: "flex: 1;",
                         textarea {
@@ -809,7 +809,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                         div {
                             key: "{comment.id}",
                             style: "display: flex; gap: 16px;",
-                            img { src: "{crate::resolve_asset_url(&comment.user_pfp)}", style: "width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" }
+                            img { referrerpolicy: "no-referrer", src: "{crate::resolve_asset_url(&comment.user_pfp)}", style: "width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" }
                             div {
                                 div {
                                     style: "display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;",

@@ -46,6 +46,33 @@ pub fn WallpaperGrid(
         });
     });
 
+    let wps = wallpapers();
+    use_effect(move || {
+        let wps = wps.clone();
+        spawn(async move {
+            let unchecked_ids: Vec<String> = {
+                let checked = crate::CHECKED_FAVORITES_IDS.read();
+                wps.iter()
+                    .map(|w| w.id.clone())
+                    .filter(|id| !checked.contains(id))
+                    .collect()
+            };
+
+            if !unchecked_ids.is_empty() {
+                if let Ok(favorited) = api::check_favorites(unchecked_ids.clone()).await {
+                    let mut fav_set = crate::FAVORITED_IDS.write();
+                    for id in favorited {
+                        fav_set.insert(id);
+                    }
+                }
+                let mut checked = crate::CHECKED_FAVORITES_IDS.write();
+                for id in unchecked_ids {
+                    checked.insert(id);
+                }
+            }
+        });
+    });
+
     rsx! {
         div {
             class: "wallpaper-grid",

@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 use std::collections::HashSet;
 
 pub static FAVORITED_IDS: GlobalSignal<HashSet<String>> = GlobalSignal::new(|| HashSet::new());
+pub static CHECKED_FAVORITES_IDS: GlobalSignal<HashSet<String>> = GlobalSignal::new(|| HashSet::new());
 
 mod footer;
 pub use footer::Footer;
