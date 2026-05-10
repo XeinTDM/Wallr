@@ -1,7 +1,7 @@
 use crate::app::{AuthState, Route};
-use api::{get_recent_users, admin_ban_user, admin_bulk_delete_users};
+use api::{admin_ban_user, admin_bulk_delete_users, get_recent_users};
 use dioxus::prelude::*;
-use lucide_dioxus::{Users, ArrowLeft, Trash2, Gavel, Undo2};
+use lucide_dioxus::{ArrowLeft, Gavel, Trash2, Undo2, Users};
 
 #[component]
 pub fn AdminUsers() -> Element {
@@ -16,7 +16,7 @@ pub fn AdminUsers() -> Element {
         AuthState::Authenticated(u) => (
             u.role == "admin" || u.role == "super_admin" || u.role == "moderator",
             u.role.clone(),
-            u.id.clone()
+            u.id.clone(),
         ),
         AuthState::Loading => return rsx! { crate::LoadingScreen {} },
         AuthState::Unauthenticated => (false, String::new(), String::new()),
@@ -27,9 +27,7 @@ pub fn AdminUsers() -> Element {
         return rsx! { div {} };
     }
 
-    let mut users_res = use_resource(move || async move {
-        get_recent_users(50).await
-    });
+    let mut users_res = use_resource(move || async move { get_recent_users(50).await });
 
     use_effect(move || {
         spawn(async move {
@@ -45,7 +43,7 @@ pub fn AdminUsers() -> Element {
         div {
             class: "container fade-in",
             style: "padding: 120px 0 80px;",
-            
+
             div {
                 style: "display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px;",
                 div {
@@ -56,10 +54,10 @@ pub fn AdminUsers() -> Element {
                         style: "padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: white; text-decoration: none;",
                         ArrowLeft { size: 24 }
                     }
-                    h1 { 
-                        style: "font-size: 36px; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 16px;", 
+                    h1 {
+                        style: "font-size: 36px; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 16px;",
                         Users { size: 36, color: "var(--accent-primary)" }
-                        "User Management" 
+                        "User Management"
                     }
                 }
                 div {
@@ -76,14 +74,14 @@ pub fn AdminUsers() -> Element {
 
             div {
                 style: "display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 48px;",
-                
+
                 div {
                     class: "glass",
                     style: "padding: 32px; border-radius: 24px;",
-                    h2 { 
-                        style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;", 
+                    h2 {
+                        style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         Users { size: 24, color: "#60a5fa" }
-                        "Recent Users List" 
+                        "Recent Users List"
                     }
                     match users_res() {
                         Some(Ok(users)) => {
@@ -127,20 +125,20 @@ pub fn AdminUsers() -> Element {
                         None => rsx! { div { "Loading..." } }
                     }
                 }
-                
+
                 if user_role == "super_admin" {
                     div {
                         class: "glass",
                         style: "padding: 32px; border-radius: 24px; height: fit-content;",
-                    h2 { 
-                        style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;", 
+                    h2 {
+                        style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         Trash2 { size: 24, color: "#ef4444" }
-                        "Advanced Moderation" 
+                        "Advanced Moderation"
                     }
                     div {
                         style: "display: flex; flex-direction: column; gap: 16px;",
                         p { style: "color: var(--text-secondary); font-size: 14px;", "Bulk delete users created within a certain time frame. This wipes their account, wallpapers, and comments permanently." }
-                        
+
                         div {
                             style: "display: flex; flex-direction: column; gap: 8px;",
                             label { style: "font-size: 14px; font-weight: 600; color: var(--text-secondary);", "Created in the last (hours):" }
@@ -186,7 +184,7 @@ pub fn AdminUsers() -> Element {
                             },
                             "Bulk Delete Users"
                         }
-                        
+
                         if !status_msg().is_empty() {
                             div {
                                 style: "margin-top: 8px; font-size: 14px; color: var(--accent-primary); font-weight: 600;",
@@ -201,11 +199,10 @@ pub fn AdminUsers() -> Element {
     }
 }
 
-
 #[component]
 fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<String>) -> Element {
     let is_banned = user.is_banned;
-    
+
     rsx! {
         tr {
             style: "border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;",
@@ -272,4 +269,3 @@ fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<Str
         }
     }
 }
-

@@ -1,6 +1,6 @@
 use crate::app::Route;
 use dioxus::prelude::*;
-use lucide_dioxus::{GitBranch, MessageSquare, LogIn};
+use lucide_dioxus::{GitBranch, LogIn, MessageSquare};
 
 #[component]
 pub fn Login() -> Element {
@@ -87,7 +87,15 @@ pub fn Login() -> Element {
                         }
                     }
                     div {
-                        label { style: "display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600;", "Password" }
+                        div {
+                            style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;",
+                            label { style: "font-size: 14px; font-weight: 600;", "Password" }
+                            Link {
+                                to: Route::ForgotPassword {},
+                                style: "font-size: 13px; color: var(--accent-primary); text-decoration: none; font-weight: 600;",
+                                "Forgot Password?"
+                            }
+                        }
                         input {
                             r#type: "password",
                             class: "glass",

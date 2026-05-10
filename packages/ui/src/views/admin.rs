@@ -179,12 +179,22 @@ pub fn Admin() -> Element {
                         "User Management"
                     }
                     p { style: "color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;", "View recent users, ban or unban accounts, and bulk delete spam users." }
-                    Link {
-                        to: Route::AdminUsers {},
-                        class: "glow-hover",
-                        style: "padding: 12px 24px; border-radius: 12px; background: rgba(96, 165, 250, 0.2); border: 1px solid rgba(96, 165, 250, 0.5); color: #93c5fd; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
-                        "Open User Management"
-                        ArrowRight { size: 18 }
+                    div {
+                        style: "display: flex; gap: 12px; margin-top: 24px;",
+                        Link {
+                            to: Route::AdminUsers {},
+                            class: "glow-hover",
+                            style: "padding: 12px 24px; border-radius: 12px; background: rgba(96, 165, 250, 0.2); border: 1px solid rgba(96, 165, 250, 0.5); color: #93c5fd; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
+                            "Open User Management"
+                            ArrowRight { size: 18 }
+                        }
+                        Link {
+                            to: Route::AdminReports {},
+                            class: "glow-hover",
+                            style: "padding: 12px 24px; border-radius: 12px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fcd34d; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
+                            "Review Reports"
+                            ArrowRight { size: 18 }
+                        }
                     }
                 }
             }

@@ -1,9 +1,13 @@
-use crate::WallpaperComment;
 use super::get_pool;
+use crate::WallpaperComment;
 
-pub async fn get_comments_db(wallpaper_id: &str, page: u32, limit: u32) -> anyhow::Result<Vec<WallpaperComment>> {
+pub async fn get_comments_db(
+    wallpaper_id: &str,
+    page: u32,
+    limit: u32,
+) -> anyhow::Result<Vec<WallpaperComment>> {
     let pool = get_pool()?;
-    
+
     let offset = (page * limit) as i64;
     let limit = limit as i64;
 
@@ -23,15 +27,18 @@ pub async fn get_comments_db(wallpaper_id: &str, page: u32, limit: u32) -> anyho
     .fetch_all(pool)
     .await?;
 
-    let comments = rows.into_iter().map(|r| WallpaperComment {
-        id: r.id,
-        wallpaper_id: r.wallpaper_id,
-        user_id: r.user_id,
-        user_name: r.user_name,
-        user_pfp: r.user_pfp,
-        content: r.content,
-        created_at: r.created_at.to_rfc3339(),
-    }).collect();
+    let comments = rows
+        .into_iter()
+        .map(|r| WallpaperComment {
+            id: r.id,
+            wallpaper_id: r.wallpaper_id,
+            user_id: r.user_id,
+            user_name: r.user_name,
+            user_pfp: r.user_pfp,
+            content: r.content,
+            created_at: r.created_at.to_rfc3339(),
+        })
+        .collect();
 
     Ok(comments)
 }
@@ -60,9 +67,13 @@ pub async fn add_comment_db(comment: &WallpaperComment) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn check_duplicate_comment(wallpaper_id: &str, user_id: &str, content: &str) -> anyhow::Result<bool> {
+pub async fn check_duplicate_comment(
+    wallpaper_id: &str,
+    user_id: &str,
+    content: &str,
+) -> anyhow::Result<bool> {
     let pool = get_pool()?;
-    
+
     let result = sqlx::query!(
         r#"
         SELECT id FROM wallpaper_comments 
@@ -75,7 +86,7 @@ pub async fn check_duplicate_comment(wallpaper_id: &str, user_id: &str, content:
     )
     .fetch_optional(pool)
     .await?;
-    
+
     Ok(result.is_some())
 }
 
@@ -89,7 +100,11 @@ pub async fn check_comment_rate_limit(user_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn delete_comment_db(comment_id: &str, user_id: &str, user_name: &str) -> anyhow::Result<()> {
+pub async fn delete_comment_db(
+    comment_id: &str,
+    user_id: &str,
+    user_name: &str,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
 
     let result = sqlx::query!(
@@ -114,11 +129,17 @@ pub async fn delete_comment_db(comment_id: &str, user_id: &str, user_name: &str)
     Ok(())
 }
 
-pub async fn update_comment_db(comment_id: &str, user_id: &str, new_content: &str) -> anyhow::Result<()> {
+pub async fn update_comment_db(
+    comment_id: &str,
+    user_id: &str,
+    new_content: &str,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
     let result = sqlx::query!(
         "UPDATE wallpaper_comments SET content = $1 WHERE id = $2 AND user_id = $3",
-        new_content, comment_id, user_id
+        new_content,
+        comment_id,
+        user_id
     )
     .execute(pool)
     .await?;

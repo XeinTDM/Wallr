@@ -3,20 +3,20 @@ pub mod cache;
 pub mod collections;
 pub mod comments;
 pub mod files;
+pub mod notifications;
 pub mod users;
 pub mod wallpapers;
-pub mod notifications;
 
 pub use auth::*;
 pub use cache::*;
 pub use collections::*;
 pub use comments::*;
 pub use files::*;
+pub use notifications::*;
 pub use users::*;
 pub use wallpapers::*;
-pub use notifications::*;
 
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::str::FromStr;
 use std::sync::OnceLock;
 

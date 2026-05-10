@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::app::Route;
+use dioxus::prelude::*;
 use lucide_dioxus::UserPlus;
 
 #[component]
@@ -9,7 +9,7 @@ pub fn Register() -> Element {
     let mut password = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
     let mut is_loading = use_signal(|| false);
-    
+
     let mut user_signal = use_context::<Signal<crate::app::AuthState>>();
     let nav = use_navigator();
 
@@ -23,7 +23,7 @@ pub fn Register() -> Element {
 
             is_loading.set(true);
             error.set(None);
-            
+
             match api::register(name(), email(), password()).await {
                 Ok(_) => {
                     if let Ok(Some(u)) = api::get_current_user().await {
@@ -44,14 +44,14 @@ pub fn Register() -> Element {
         div {
             class: "container fade-in",
             style: "padding: 160px 0 80px; display: flex; justify-content: center;",
-            
+
             div {
                 class: "glass",
                 style: "width: 100%; max-width: 450px; padding: 48px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.1); text-align: center;",
-                
+
                 h2 { style: "font-size: 32px; font-weight: 900; margin-bottom: 8px;", "Join Wallr" }
                 p { style: "color: var(--text-secondary); margin-bottom: 40px;", "Start your curated wallpaper journey today." }
-                
+
                 form {
                     style: "display: grid; gap: 16px; text-align: left;",
                     onsubmit: on_submit,
@@ -91,7 +91,7 @@ pub fn Register() -> Element {
                             minlength: "8",
                         }
                     }
-                    
+
                     if let Some(err) = error() {
                         p { style: "color: #ff4d4d; font-size: 13px; margin: 0; font-weight: 600;", "{err}" }
                     }
@@ -107,7 +107,7 @@ pub fn Register() -> Element {
                         if is_loading() { "Creating account..." } else { "Create Account" }
                     }
                 }
-                
+
                 p {
                     style: "margin-top: 32px; font-size: 14px; color: var(--text-secondary);",
                     "Already have an account? "

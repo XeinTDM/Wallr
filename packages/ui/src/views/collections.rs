@@ -1,26 +1,24 @@
-use dioxus::prelude::*;
-use api::get_collections;
 use crate::LoadingScreen;
+use api::get_collections;
+use dioxus::prelude::*;
 
 #[component]
 pub fn Collections() -> Element {
-    let collections = use_resource(move || async move {
-        get_collections().await
-    });
+    let collections = use_resource(move || async move { get_collections().await });
 
     rsx! {
         div {
             class: "container fade-in",
             style: "padding: 120px 0 80px;",
-            
+
             div {
                 class: "section-header",
                 style: "margin-bottom: 64px; display: flex; justify-content: space-between; align-items: flex-end;",
                 div {
-                    h1 { 
+                    h1 {
                         class: "text-gradient",
                         style: "font-size: 48px; font-weight: 900; margin-bottom: 12px;",
-                        "Your Collections" 
+                        "Your Collections"
                     }
                     p { style: "color: var(--text-secondary);", "Curated groups of wallpapers for every mood." }
                 }
@@ -33,7 +31,7 @@ pub fn Collections() -> Element {
 
             div {
                 style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 32px;",
-                
+
                 match collections() {
                     Some(Ok(list)) => rsx! {
                         for col in list {
@@ -60,7 +58,7 @@ fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Elemen
         div {
             class: "glass collection-card glow-hover",
             style: "border-radius: 24px; overflow: hidden; cursor: pointer; transition: all 0.3s ease;",
-            
+
             div {
                 style: "height: 200px; position: relative;",
                 img {
@@ -72,7 +70,7 @@ fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Elemen
                     "{count} items"
                 }
             }
-            
+
             div {
                 style: "padding: 20px;",
                 h3 { style: "font-size: 20px; font-weight: 800; margin-bottom: 4px;", "{name}" }

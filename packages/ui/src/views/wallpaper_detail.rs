@@ -13,6 +13,10 @@ pub fn WallpaperDetail(id: String) -> Element {
     let mut toaster = use_toaster();
     let nav = use_navigator();
 
+    let mut is_download_menu_open = use_signal(|| false);
+    let mut is_adding_to_col = use_signal(|| false);
+    let my_cols = use_resource(move || async move { api::get_my_collections().await });
+
     let mut current_id = use_signal(|| id.clone());
     if *current_id.peek() != id {
         current_id.set(id.clone());
@@ -95,10 +99,10 @@ pub fn WallpaperDetail(id: String) -> Element {
         }
     });
 
-    let related =
-        use_resource(
-            move || async move { get_wallpapers(0, 4, api::FilterOptions::default()).await },
-        );
+    let related = use_resource(move || {
+        let current = current_id();
+        async move { api::get_similar_wallpapers(current, 4).await }
+    });
 
     rsx! {
         div {
@@ -126,9 +130,21 @@ pub fn WallpaperDetail(id: String) -> Element {
                             div {
                                 class: "detail-image-container",
                                 style: "border-radius: 32px; overflow: hidden; height: fit-content;",
-                                img {
-                                    src: "{crate::resolve_asset_url(&wp.image_url)}",
-                                    style: "width: 100%; height: auto; display: block; border-radius: 32px;"
+                                if wp.is_live {
+                                    video {
+                                        src: "{crate::resolve_asset_url(&wp.image_url)}",
+                                        poster: "{crate::resolve_asset_url(&wp.thumbnail_url)}",
+                                        autoplay: "true",
+                                        loop: "true",
+                                        muted: "true",
+                                        playsinline: "true",
+                                        style: "width: 100%; height: auto; display: block; border-radius: 32px;"
+                                    }
+                                } else {
+                                    img {
+                                        src: "{crate::resolve_asset_url(&wp.image_url)}",
+                                        style: "width: 100%; height: auto; display: block; border-radius: 32px;"
+                                    }
                                 }
                             }
 
@@ -161,7 +177,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     h4 { style: "margin-bottom: 16px; font-size: 14px; color: var(--text-muted);", "TECHNICAL DETAILS" }
                                     div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 16px;",
                                         DetailItem { label: "Resolution", value: "{wp.dimensions.0}x{wp.dimensions.1}" }
-                                        DetailItem { label: "Format", value: if wp.image_url.ends_with(".avif") { "AVIF" } else { "Processing..." } }
+                                        DetailItem { label: "Format", value: if wp.is_live { "Video" } else if wp.image_url.ends_with(".avif") { "AVIF" } else { "Processing..." } }
                                         DetailItem { label: "Size", value: "{size_display}" }
                                         DetailItem { label: "Likes", value: "{wp.likes}" }
                                         DetailItem { label: "Downloads", value: "{wp.downloads}" }
@@ -183,16 +199,68 @@ pub fn WallpaperDetail(id: String) -> Element {
 
                             div {
                                 style: "display: flex; gap: 12px;",
-                                if wp.image_url.ends_with(".avif") {
-                                    a {
-                                        class: "glow-hover",
-                                        href: "/wallpaper/{wp.id}/download",
-                                        download: "{wp.title}",
-                                        target: "_blank",
-                                        style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.2s ease;",
-                                        onclick: move |_| toaster.success("Download started!"),
-                                        Download { size: 20 }
-                                        "Download Original"
+                                if wp.is_live || wp.image_url.ends_with(".avif") {
+                                    {
+                                        rsx! {
+                                            div {
+                                                style: "position: relative; flex: 1; display: flex;",
+                                                button {
+                                                    class: "glow-hover",
+                                                    style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.2s ease; cursor: pointer;",
+                                                    onclick: move |_| is_download_menu_open.toggle(),
+                                                    Download { size: 20 }
+                                                    "Download Options"
+                                                }
+                                                if is_download_menu_open() {
+                                                    div {
+                                                        style: "position: absolute; top: 70px; left: 0; right: 0; background: var(--bg-secondary); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);",
+                                                        div {
+                                                            style: "display: flex; flex-direction: column; gap: 8px;",
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
+                                                                span { "Original Size" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "AVIF" }
+                                                            }
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download?width=3840&format=jpg",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
+                                                                span { "4K UHD (3840w)" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
+                                                            }
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download?width=2560&format=jpg",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
+                                                                span { "1440p (2560w)" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
+                                                            }
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download?width=1920&format=jpg",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
+                                                                span { "1080p (1920w)" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     button {
@@ -215,9 +283,6 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     Heart { size: 24, fill: if is_favorited() { "currentColor" } else { "none" } }
                                 }
                                 {
-                                    let mut is_adding_to_col = use_signal(|| false);
-                                    let my_cols = use_resource(move || async move { api::get_my_collections().await });
-
                                     rsx! {
                                         div {
                                             style: "position: relative;",

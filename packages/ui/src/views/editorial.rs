@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::CategoryHero;
+use dioxus::prelude::*;
 
 #[component]
 pub fn Editorial() -> Element {

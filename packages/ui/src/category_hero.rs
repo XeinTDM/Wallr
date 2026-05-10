@@ -56,10 +56,10 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                         span { class: "mx-2", "/" }
                         span { "{props.breadcrumb}" }
                     }
-                    h1 { 
-                        class: "category-title", 
+                    h1 {
+                        class: "category-title",
                         style: "font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; letter-spacing: -0.04em; color: var(--text-primary); text-transform: capitalize;",
-                        "{props.title}" 
+                        "{props.title}"
                     }
                 }
 

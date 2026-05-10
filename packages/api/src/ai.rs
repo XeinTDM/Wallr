@@ -28,6 +28,7 @@ pub fn init_tagger() {
 pub struct LocalTagger {
     model: clip::ClipModel,
     device: Device,
+    tokenizer: Tokenizer,
     text_embeddings: Tensor,
     tags: Vec<String>,
     mean: Tensor,
@@ -56,13 +57,12 @@ impl LocalTagger {
 
         let config = clip::ClipConfig::vit_base_patch32();
 
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)
-                ?
-        };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? };
         let model = clip::ClipModel::new(vb, &config)?;
 
-        let tokenizer = Tokenizer::from_file(tokenizer_file).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let tokenizer =
+            Tokenizer::from_file(tokenizer_file).map_err(|e| anyhow::anyhow!("{}", e))?;
 
         let tag_prompts: Vec<String> = tags.iter().map(|t| format!("a photo of {}", t)).collect();
         let tokens = tokenizer
@@ -79,30 +79,21 @@ impl LocalTagger {
         }
 
         let text_tensor = Tensor::new(padded_tokens, &device)?;
-        let text_features = model
-            .get_text_features(&text_tensor)
-            ?;
+        let text_features = model.get_text_features(&text_tensor)?;
 
-        let text_norms = text_features
-            .sqr()
-            ?
-            .sum_keepdim(1)
-            ?
-            .sqrt()
-            ?;
+        let text_norms = text_features.sqr()?.sum_keepdim(1)?.sqrt()?;
 
-        let normalized_text_features = text_features
-            .broadcast_div(&text_norms)
-            ?;
+        let normalized_text_features = text_features.broadcast_div(&text_norms)?;
 
-        let mean = Tensor::new(&[0.48145466f32, 0.4578275, 0.40821073], &device)?
-            .reshape((1, 3, 1, 1))?;
+        let mean =
+            Tensor::new(&[0.48145466f32, 0.4578275, 0.40821073], &device)?.reshape((1, 3, 1, 1))?;
         let std = Tensor::new(&[0.26862954f32, 0.26130258, 0.27577711], &device)?
             .reshape((1, 3, 1, 1))?;
 
         Ok(Self {
             model,
             device,
+            tokenizer,
             text_embeddings: normalized_text_features,
             tags,
             mean,
@@ -110,52 +101,27 @@ impl LocalTagger {
         })
     }
 
-    pub fn tag_image(&self, img: &DynamicImage) -> anyhow::Result<Vec<String>> {
+    pub fn tag_image(&self, img: &DynamicImage) -> anyhow::Result<(Vec<String>, Vec<f32>)> {
         let resized = img.resize_exact(224, 224, image::imageops::FilterType::Triangle);
         let pixels = resized.to_rgb8().into_raw();
 
-        let tensor = Tensor::from_vec(pixels, (224, 224, 3), &self.device)
-            ?
-            .permute((2, 0, 1))
-            ? // HWC to CHW
-            .to_dtype(DType::F32)
-            ?
-            .affine(1.0 / 255.0, 0.0)
-            ?
-            .unsqueeze(0)
-            ?;
+        let tensor = Tensor::from_vec(pixels, (224, 224, 3), &self.device)?
+            .permute((2, 0, 1))?
+            // HWC to CHW
+            .to_dtype(DType::F32)?
+            .affine(1.0 / 255.0, 0.0)?
+            .unsqueeze(0)?;
 
-        let tensor = tensor
-            .broadcast_sub(&self.mean)
-            ?
-            .broadcast_div(&self.std)
-            ?;
+        let tensor = tensor.broadcast_sub(&self.mean)?.broadcast_div(&self.std)?;
 
-        let image_features = self
-            .model
-            .get_image_features(&tensor)
-            ?;
+        let image_features = self.model.get_image_features(&tensor)?;
 
-        let img_norm = image_features
-            .sqr()
-            ?
-            .sum_keepdim(1)
-            ?
-            .sqrt()
-            ?;
-        let normalized_image_features = image_features
-            .broadcast_div(&img_norm)
-            ?;
+        let img_norm = image_features.sqr()?.sum_keepdim(1)?.sqrt()?;
+        let normalized_image_features = image_features.broadcast_div(&img_norm)?;
 
-        let similarities = normalized_image_features
-            .matmul(&self.text_embeddings.t()?)
-            ?;
+        let similarities = normalized_image_features.matmul(&self.text_embeddings.t()?)?;
 
-        let similarities_vec: Vec<f32> = similarities
-            .squeeze(0)
-            ?
-            .to_vec1()
-            ?;
+        let similarities_vec: Vec<f32> = similarities.squeeze(0)?.to_vec1()?;
 
         let threshold = 0.24;
         let mut matched_tags = Vec::new();
@@ -170,6 +136,22 @@ impl LocalTagger {
             matched_tags.push("misc".to_string());
         }
 
-        Ok(matched_tags)
+        let image_embedding_vec: Vec<f32> = normalized_image_features.squeeze(0)?.to_vec1()?;
+
+        Ok((matched_tags, image_embedding_vec))
+    }
+
+    pub fn get_text_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+        let tokens = self
+            .tokenizer
+            .encode(text, true)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        let token_ids = tokens.get_ids().to_vec();
+        let text_tensor = Tensor::new(vec![token_ids], &self.device)?;
+        let text_features = self.model.get_text_features(&text_tensor)?;
+        let text_norms = text_features.sqr()?.sum_keepdim(1)?.sqrt()?;
+        let normalized_text_features = text_features.broadcast_div(&text_norms)?;
+        let embedding: Vec<f32> = normalized_text_features.squeeze(0)?.to_vec1()?;
+        Ok(embedding)
     }
 }

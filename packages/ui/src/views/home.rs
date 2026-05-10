@@ -1,6 +1,6 @@
+use crate::Hero;
 use api::get_wallpapers;
 use dioxus::prelude::*;
-use crate::Hero;
 
 #[component]
 pub fn Home() -> Element {
@@ -9,7 +9,9 @@ pub fn Home() -> Element {
     let mut has_more = use_signal(|| true);
 
     let _fetch = use_resource(move || async move {
-        if !has_more() { return; }
+        if !has_more() {
+            return;
+        }
         let p = page();
         if let Ok(new_wps) = get_wallpapers(p, 20, api::FilterOptions::default()).await {
             if new_wps.is_empty() {

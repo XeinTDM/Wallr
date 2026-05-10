@@ -1,8 +1,8 @@
+use crate::views::FollowsModal;
 use crate::views::profile::ProfileHeader;
+use crate::{LoadingScreen, WallpaperCard};
 use api::{get_public_profile, get_public_uploads};
 use dioxus::prelude::*;
-use crate::{LoadingScreen, WallpaperCard};
-
 
 #[component]
 pub fn PublicProfile(username: String) -> Element {
@@ -21,13 +21,23 @@ pub fn PublicProfile(username: String) -> Element {
         async move { get_public_uploads(uname, 0, 100).await }
     });
 
+    let mut is_follows_modal_open = use_signal(|| false);
+    let mut follows_modal_type = use_signal(|| String::from("followers"));
+
     rsx! {
         div {
-            class: "fade-in",
+            div {
+                class: "fade-in",
             style: "padding-top: var(--nav-height, 68px);",
 
             match profile() {
                 Some(Ok(Some(user_data))) => {
+                    let auth_state = use_context::<Signal<crate::app::AuthState>>();
+                    let is_owner = match auth_state() {
+                        crate::app::AuthState::Authenticated(u) => u.id == user_data.id,
+                        _ => false,
+                    };
+
                     let latest_upload_url = match uploads() {
                         Some(Ok(list)) => list.first().map(|w| w.thumbnail_url.clone()),
                         _ => None,
@@ -40,8 +50,16 @@ pub fn PublicProfile(username: String) -> Element {
                     rsx! {
                         ProfileHeader {
                             user: user_data.clone(),
-                            is_owner: false,
+                            is_owner,
                             latest_upload_url,
+                            on_followers_click: move |_| {
+                                follows_modal_type.set(String::from("followers"));
+                                is_follows_modal_open.set(true);
+                            },
+                            on_following_click: move |_| {
+                                follows_modal_type.set(String::from("following"));
+                                is_follows_modal_open.set(true);
+                            },
                         }
 
                         div {
@@ -94,6 +112,11 @@ pub fn PublicProfile(username: String) -> Element {
                                 }
                             }
                         }
+                        FollowsModal {
+                            is_open: is_follows_modal_open,
+                            modal_type: follows_modal_type(),
+                            username: user_data.name.clone(),
+                        }
                     }
                 },
                 Some(Ok(None)) => rsx! {
@@ -109,6 +132,7 @@ pub fn PublicProfile(username: String) -> Element {
                     }
                 },
                 None => rsx! { LoadingScreen {} }
+            }
             }
         }
     }

@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use lucide_dioxus::{ChevronDown, LogOut, Settings, User, X, Bell};
+use lucide_dioxus::{Bell, ChevronDown, LogOut, Settings, User, X};
 
 const NAVBAR_CSS: Asset = asset!("/assets/styling/navbar.css");
 const LOGO_PNG: Asset = asset!("/assets/logo.png");
@@ -40,13 +40,27 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
     let nav = use_navigator();
 
     let has_user = props.user.is_some();
-    let mut notifications_res = use_resource(move || {
-        async move {
-            if has_user {
-                api::get_my_notifications().await.unwrap_or_default()
-            } else {
-                vec![]
-            }
+    let mut notifications_res = use_resource(move || async move {
+        if has_user {
+            api::get_my_notifications().await.unwrap_or_default()
+        } else {
+            vec![]
+        }
+    });
+
+    use_effect(move || {
+        if has_user {
+            spawn(async move {
+                loop {
+                    #[cfg(target_arch = "wasm32")]
+                    gloo_timers::future::sleep(std::time::Duration::from_secs(15)).await;
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+
+                    notifications_res.restart();
+                }
+            });
         }
     });
 
@@ -65,28 +79,36 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
         {
             use gloo_events::EventListener;
             use web_sys::wasm_bindgen::JsCast;
-            
+
             let window = web_sys::window().unwrap();
-            
+
             let listener = EventListener::new(&window, "keydown", move |event| {
                 let e: &web_sys::KeyboardEvent = event.unchecked_ref();
-                
+
                 if e.ctrl_key() || e.meta_key() || e.alt_key() {
                     return;
                 }
-                
-                let tag = e.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()).map(|el| el.tag_name().to_lowercase());
+
+                let tag = e
+                    .target()
+                    .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    .map(|el| el.tag_name().to_lowercase());
                 if let Some(t) = tag {
                     if t == "input" || t == "textarea" {
                         return;
                     }
                 }
-                
+
                 let key_str: String = e.key().into();
                 let key_str = key_str.to_lowercase();
                 if key_str == "/" || key_str == "s" {
                     event.prevent_default();
-                    if let Some(input) = web_sys::window().unwrap().document().unwrap().get_element_by_id("nav-search-input") {
+                    if let Some(input) = web_sys::window()
+                        .unwrap()
+                        .document()
+                        .unwrap()
+                        .get_element_by_id("nav-search-input")
+                    {
                         let _ = input.dyn_ref::<web_sys::HtmlElement>().unwrap().focus();
                     }
                 }
@@ -439,14 +461,18 @@ pub fn DropdownSection(
     children: Element,
     #[props(default = false)] separator: bool,
 ) -> Element {
-    let border_style = if separator { "border-left: 1px solid rgba(255, 255, 255, 0.08);" } else { "" };
+    let border_style = if separator {
+        "border-left: 1px solid rgba(255, 255, 255, 0.08);"
+    } else {
+        ""
+    };
     rsx! {
         div {
             class: if separator { "mega-col separator" } else { "mega-col" },
             style: "flex: 1; padding: 32px; display: flex; flex-direction: column; gap: 12px; {border_style}",
-            h6 { 
+            h6 {
                 style: "font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent-primary); margin-bottom: 12px;",
-                "{title}" 
+                "{title}"
             }
             {children}
         }
@@ -457,7 +483,7 @@ pub fn DropdownSection(
 fn NotificationItem(notif: api::Notification, on_read: EventHandler<String>) -> Element {
     let is_read = notif.is_read;
     let nid = notif.id.clone();
-    
+
     rsx! {
         div {
             style: format!("padding: 12px; border-radius: 12px; background: {}; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 4px; cursor: pointer;", if is_read { "rgba(0,0,0,0.1)" } else { "rgba(96, 165, 250, 0.1)" }),
@@ -467,7 +493,7 @@ fn NotificationItem(notif: api::Notification, on_read: EventHandler<String>) -> 
                     on_read.call(nid.clone());
                 }
             },
-            span { style: "font-weight: 600; font-size: 14px; color: white; display: flex; align-items: center; justify-content: space-between;", 
+            span { style: "font-weight: 600; font-size: 14px; color: white; display: flex; align-items: center; justify-content: space-between;",
                 "{notif.title}"
                 if !is_read {
                     div { style: "width: 6px; height: 6px; border-radius: 50%; background: #60a5fa;" }
@@ -478,4 +504,3 @@ fn NotificationItem(notif: api::Notification, on_read: EventHandler<String>) -> 
         }
     }
 }
-

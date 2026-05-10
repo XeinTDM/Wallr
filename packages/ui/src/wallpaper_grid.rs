@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
-use api::Wallpaper;
 use crate::WallpaperCard;
+use api::Wallpaper;
+use dioxus::prelude::*;
 
 #[component]
 pub fn WallpaperGrid(
@@ -10,13 +10,22 @@ pub fn WallpaperGrid(
     #[props(default)] empty_message: String,
     #[props(default)] empty_submessage: String,
 ) -> Element {
-    let empty_msg = if empty_message.is_empty() { "No wallpapers found." } else { &empty_message };
-    let empty_sub = if empty_submessage.is_empty() { "Check back later or upload your own!" } else { &empty_submessage };
+    let empty_msg = if empty_message.is_empty() {
+        "No wallpapers found."
+    } else {
+        &empty_message
+    };
+    let empty_sub = if empty_submessage.is_empty() {
+        "Check back later or upload your own!"
+    } else {
+        &empty_submessage
+    };
 
     let on_end = on_end_reached;
     use_effect(move || {
         spawn(async move {
-            let mut eval = document::eval(r#"
+            let mut eval = document::eval(
+                r#"
                 let sentinel = document.getElementById('infinite-scroll-sentinel');
                 if (!sentinel) return;
                 let observer = new IntersectionObserver((entries) => {
@@ -25,8 +34,9 @@ pub fn WallpaperGrid(
                     }
                 }, { rootMargin: '400px' });
                 observer.observe(sentinel);
-            "#);
-            
+            "#,
+            );
+
             while let Ok(msg) = eval.recv::<String>().await {
                 if msg == "end_reached" {
                     on_end.call(());
@@ -53,13 +63,13 @@ pub fn WallpaperGrid(
                         wallpaper: wp.clone(),
                     }
                 }
-                
+
                 if is_loading {
                     for i in 0..4 {
                         div { key: "skeleton-{i}", class: "skeleton glass", style: "height: 240px; border-radius: 20px;" }
                     }
                 }
-                
+
                 div {
                     id: "infinite-scroll-sentinel",
                     style: "grid-column: 1 / -1; height: 1px; visibility: hidden;",

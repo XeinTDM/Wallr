@@ -1,10 +1,10 @@
-use crate::User;
 use super::cache::{get_login_rate_limit_cache, get_register_rate_limit_cache};
 use super::users::get_user_by_id;
+use crate::User;
 
 pub async fn check_login_rate_limit(ip: &str, email: &str) -> anyhow::Result<()> {
     let cache = get_login_rate_limit_cache();
-    
+
     let ip_key = format!("ip:{}", ip);
     let ip_count = cache.get(&ip_key).await.unwrap_or(0);
 
@@ -102,7 +102,7 @@ pub async fn verify_token(token: &str) -> anyhow::Result<User> {
         .get_claim("user_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing user_id claim"))?;
-        
+
     let token_version = claims
         .get_claim("token_version")
         .and_then(|v| v.as_i64())
@@ -111,7 +111,7 @@ pub async fn verify_token(token: &str) -> anyhow::Result<User> {
     let user_record = get_user_by_id(id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("User not found"))?;
-        
+
     if user_record.token_version != token_version {
         anyhow::bail!("Token revoked");
     }

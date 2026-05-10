@@ -1,7 +1,6 @@
+use crate::{CategoryHero, WallpaperGrid};
 use api::get_wallpapers_by_tag;
 use dioxus::prelude::*;
-use crate::{CategoryHero, WallpaperGrid};
-
 
 #[component]
 pub fn Latest() -> Element {
@@ -28,15 +27,17 @@ pub fn Latest() -> Element {
             timeframe: timeframe(),
         };
         async move {
-            if !has_more() { return; }
+            if !has_more() {
+                return;
+            }
             let p = page();
-            
+
             let res = if current_cat.is_empty() {
                 get_wallpapers_by_tag("latest".to_string(), p, 20, filters).await
             } else {
                 api::get_wallpapers_by_tag(current_cat, p, 20, filters).await
             };
-            
+
             if let Ok(new_wps) = res {
                 if new_wps.is_empty() {
                     has_more.set(false);

@@ -14,13 +14,11 @@ pub async fn load_all_collections() -> anyhow::Result<Vec<crate::Collection>> {
 
     let results: Vec<crate::Collection> = rows
         .into_iter()
-        .map(|row| {
-            crate::Collection {
-                id: row.id,
-                name: row.name,
-                item_count: row.item_count as u32,
-                cover_url: row.cover_url,
-            }
+        .map(|row| crate::Collection {
+            id: row.id,
+            name: row.name,
+            item_count: row.item_count as u32,
+            cover_url: row.cover_url,
         })
         .collect();
 
@@ -52,7 +50,7 @@ pub async fn get_user_collections(user_id: &str) -> anyhow::Result<Vec<crate::Us
         SELECT 
             c.id, c.user_id, c.name, c.description, c.is_private, c.created_at,
             COALESCE(ic.count, 0) as item_count,
-            lc.thumbnail_url as cover_url
+            lc.thumbnail_url as "cover_url?"
         FROM user_collections c
         LEFT JOIN (
             SELECT collection_id, COUNT(*) as count
@@ -75,26 +73,31 @@ pub async fn get_user_collections(user_id: &str) -> anyhow::Result<Vec<crate::Us
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|r| crate::UserCollection {
-        id: r.id,
-        user_id: r.user_id,
-        name: r.name,
-        description: r.description,
-        is_private: r.is_private,
-        item_count: r.item_count.unwrap_or(0) as u32,
-        cover_url: r.cover_url,
-        created_at: r.created_at,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| crate::UserCollection {
+            id: r.id,
+            user_id: r.user_id,
+            name: r.name,
+            description: r.description,
+            is_private: r.is_private,
+            item_count: r.item_count.unwrap_or(0) as u32,
+            cover_url: r.cover_url,
+            created_at: r.created_at,
+        })
+        .collect())
 }
 
-pub async fn get_public_user_collections_db(user_id: &str) -> anyhow::Result<Vec<crate::UserCollection>> {
+pub async fn get_public_user_collections_db(
+    user_id: &str,
+) -> anyhow::Result<Vec<crate::UserCollection>> {
     let pool = get_pool()?;
     let rows = sqlx::query!(
         r#"
         SELECT 
             c.id, c.user_id, c.name, c.description, c.is_private, c.created_at,
             COALESCE(ic.count, 0) as item_count,
-            lc.thumbnail_url as cover_url
+            lc.thumbnail_url as "cover_url?"
         FROM user_collections c
         LEFT JOIN (
             SELECT collection_id, COUNT(*) as count
@@ -117,19 +120,25 @@ pub async fn get_public_user_collections_db(user_id: &str) -> anyhow::Result<Vec
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|r| crate::UserCollection {
-        id: r.id,
-        user_id: r.user_id,
-        name: r.name,
-        description: r.description,
-        is_private: r.is_private,
-        item_count: r.item_count.unwrap_or(0) as u32,
-        cover_url: r.cover_url,
-        created_at: r.created_at,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| crate::UserCollection {
+            id: r.id,
+            user_id: r.user_id,
+            name: r.name,
+            description: r.description,
+            is_private: r.is_private,
+            item_count: r.item_count.unwrap_or(0) as u32,
+            cover_url: r.cover_url,
+            created_at: r.created_at,
+        })
+        .collect())
 }
 
-pub async fn add_wallpaper_to_collection_db(collection_id: &str, wallpaper_id: &str) -> anyhow::Result<()> {
+pub async fn add_wallpaper_to_collection_db(
+    collection_id: &str,
+    wallpaper_id: &str,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
     sqlx::query!(
         "INSERT INTO collection_items (collection_id, wallpaper_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -140,18 +149,26 @@ pub async fn add_wallpaper_to_collection_db(collection_id: &str, wallpaper_id: &
     Ok(())
 }
 
-pub async fn remove_wallpaper_from_collection_db(collection_id: &str, wallpaper_id: &str) -> anyhow::Result<()> {
+pub async fn remove_wallpaper_from_collection_db(
+    collection_id: &str,
+    wallpaper_id: &str,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
     sqlx::query!(
         "DELETE FROM collection_items WHERE collection_id = $1 AND wallpaper_id = $2",
-        collection_id, wallpaper_id
+        collection_id,
+        wallpaper_id
     )
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn get_collection_wallpapers_db(collection_id: &str, page: u32, limit: u32) -> anyhow::Result<std::sync::Arc<Vec<crate::Wallpaper>>> {
+pub async fn get_collection_wallpapers_db(
+    collection_id: &str,
+    page: u32,
+    limit: u32,
+) -> anyhow::Result<std::sync::Arc<Vec<crate::Wallpaper>>> {
     let pool = get_pool()?;
     let offset = (page * limit) as i64;
     let limit = limit as i64;
@@ -168,7 +185,9 @@ pub async fn get_collection_wallpapers_db(collection_id: &str, page: u32, limit:
         ORDER BY ci.added_at DESC
         LIMIT $2 OFFSET $3
         "#,
-        collection_id, limit, offset
+        collection_id,
+        limit,
+        offset
     )
     .fetch_all(pool)
     .await?;
@@ -176,7 +195,8 @@ pub async fn get_collection_wallpapers_db(collection_id: &str, page: u32, limit:
     let mut wallpapers = Vec::new();
     for row in rows {
         let tags: Vec<String> = serde_json::from_value(row.tags).unwrap_or_default();
-        let primary_colors: Vec<String> = serde_json::from_value(row.primary_colors).unwrap_or_default();
+        let primary_colors: Vec<String> =
+            serde_json::from_value(row.primary_colors).unwrap_or_default();
         wallpapers.push(crate::Wallpaper {
             id: row.id,
             title: row.title,
@@ -191,6 +211,8 @@ pub async fn get_collection_wallpapers_db(collection_id: &str, page: u32, limit:
             downloads: row.downloads.unwrap_or(0) as u32,
             created_at: row.created_at,
             is_private: row.is_private,
+            is_live: false,
+            embedding: None,
         });
     }
 
@@ -218,18 +240,21 @@ pub async fn update_collection_db(
 
 pub async fn delete_collection_db(collection_id: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    
+
     let mut tx = pool.begin().await?;
-    
-    sqlx::query!("DELETE FROM collection_items WHERE collection_id = $1", collection_id)
-        .execute(&mut *tx)
-        .await?;
-        
+
+    sqlx::query!(
+        "DELETE FROM collection_items WHERE collection_id = $1",
+        collection_id
+    )
+    .execute(&mut *tx)
+    .await?;
+
     sqlx::query!("DELETE FROM user_collections WHERE id = $1", collection_id)
         .execute(&mut *tx)
         .await?;
-        
+
     tx.commit().await?;
-    
+
     Ok(())
 }

@@ -1,4 +1,5 @@
 use crate::app::Route;
+use crate::views::FollowsModal;
 use crate::{LoadingScreen, WallpaperCard, use_toaster};
 use api::{UserCollection, create_user_collection, get_my_collections};
 use dioxus::prelude::*;
@@ -11,6 +12,9 @@ pub fn Profile() -> Element {
     let toaster = use_toaster();
 
     let mut loaded_uploads = use_signal(|| false);
+    let mut is_create_collection_modal_open = use_signal(|| false);
+    let mut is_follows_modal_open = use_signal(|| false);
+    let mut follows_modal_type = use_signal(|| String::from("followers"));
     let mut loaded_collections = use_signal(|| false);
     let mut loaded_favorites = use_signal(|| true);
     let mut loaded_analytics = use_signal(|| false);
@@ -97,14 +101,24 @@ pub fn Profile() -> Element {
             ".pfp-overlay {{ border-radius: 50%; }}"
         }
         div {
-            class: "fade-in",
-            style: "padding-top: var(--nav-height, 68px);",
+            // Apply fade-in to the inner wrapper so modals at the root can escape the containing block
+            div {
+                class: "fade-in",
+                style: "padding-top: var(--nav-height, 68px);",
 
-            ProfileHeader {
-                user: user_data.clone(),
-                is_owner: true,
-                latest_upload_url,
-            }
+                ProfileHeader {
+                    user: user_data.clone(),
+                    is_owner: true,
+                    latest_upload_url,
+                    on_followers_click: move |_| {
+                        follows_modal_type.set(String::from("followers"));
+                        is_follows_modal_open.set(true);
+                    },
+                    on_following_click: move |_| {
+                        follows_modal_type.set(String::from("following"));
+                        is_follows_modal_open.set(true);
+                    },
+                }
 
             div {
                 class: "container",
@@ -220,6 +234,13 @@ pub fn Profile() -> Element {
                                     for col in list {
                                         CollectionCard { key: "{col.id}", collection: col }
                                     }
+                                    div {
+                                        class: "collection-card glass glow-hover",
+                                        style: "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 260px; border-radius: 20px; border: 2px dashed rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;",
+                                        onclick: move |_| is_create_collection_modal_open.set(true),
+                                        lucide_dioxus::Plus { size: 48, color: "var(--text-muted)" }
+                                        span { style: "margin-top: 16px; font-weight: 600; color: var(--text-secondary); font-size: 18px;", "New Collection" }
+                                    }
                                 },
                                 Some(Ok(_)) => rsx! {
                                     div {
@@ -231,28 +252,7 @@ pub fn Profile() -> Element {
                                             class: "glow-hover",
                                             style: "padding: 12px 24px; border-radius: 12px; background: var(--accent-primary); color: white; font-weight: 600; border: none; cursor: pointer;",
                                             onclick: move |_| {
-                                                #[cfg(target_arch = "wasm32")]
-                                                if let Some(win) = web_sys::window() {
-                                                    if let Ok(Some(name)) = win.prompt_with_message("Enter collection name:") {
-                                                        if !name.trim().is_empty() {
-                                                            let mut toaster = toaster;
-                                                            let mut cols = collections;
-                                                            spawn(async move {
-                                                                if let Ok(_) = create_user_collection(name, None, false).await {
-                                                                    toaster.success("Collection created!");
-                                                                    cols.restart();
-                                                                } else {
-                                                                    toaster.error("Failed to create collection");
-                                                                }
-                                                            });
-                                                        }
-                                                    }
-                                                }
-                                                #[cfg(not(target_arch = "wasm32"))]
-                                                {
-                                                    let mut toaster = toaster;
-                                                    toaster.error("Collection creation prompt not supported on desktop yet.");
-                                                }
+                                                is_create_collection_modal_open.set(true);
                                             },
                                             "Create Collection"
                                         }
@@ -310,6 +310,29 @@ pub fn Profile() -> Element {
                     _ => rsx! { div { "Tab not found" } }
                 }
             }
+            }
+        }
+
+        CreateCollectionModal {
+            is_open: is_create_collection_modal_open,
+            on_create: move |name: String| {
+                let mut toaster = toaster;
+                let mut cols = collections;
+                spawn(async move {
+                    if let Ok(_) = create_user_collection(name, None, false).await {
+                        toaster.success("Collection created!");
+                        cols.restart();
+                    } else {
+                        toaster.error("Failed to create collection");
+                    }
+                });
+            }
+        }
+
+        FollowsModal {
+            is_open: is_follows_modal_open,
+            modal_type: follows_modal_type(),
+            username: user_data.name.clone(),
         }
         }
     }
@@ -378,6 +401,8 @@ pub struct ProfileHeaderProps {
     pub user: api::User,
     pub is_owner: bool,
     pub latest_upload_url: Option<String>,
+    pub on_followers_click: EventHandler<()>,
+    pub on_following_click: EventHandler<()>,
 }
 
 #[component]
@@ -509,9 +534,21 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                         style: "color: var(--text-secondary); font-size: 15px; display: flex; align-items: center; gap: 12px;",
                         span { "{props.user.email}" }
                         span { style: "opacity: 0.5;", "•" }
-                        span { style: "font-weight: 600; color: white;", "{followers}" } span { "Followers" }
+                        button {
+                            class: "glow-hover-text",
+                            style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
+                            onclick: move |_| props.on_followers_click.call(()),
+                            span { style: "font-weight: 600; color: white;", "{followers}" }
+                            span { "Followers" }
+                        }
                         span { style: "opacity: 0.5;", "•" }
-                        span { style: "font-weight: 600; color: white;", "{following}" } span { "Following" }
+                        button {
+                            class: "glow-hover-text",
+                            style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
+                            onclick: move |_| props.on_following_click.call(()),
+                            span { style: "font-weight: 600; color: white;", "{following}" }
+                            span { "Following" }
+                        }
                     }
                     if let Some(bio) = &props.user.bio {
                         p { style: "color: var(--text-muted); font-size: 15px; margin-top: 16px; line-height: 1.5; max-width: 600px;", "{bio}" }
@@ -529,6 +566,99 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Props, Clone, PartialEq)]
+pub struct CreateCollectionModalProps {
+    pub is_open: Signal<bool>,
+    pub on_create: EventHandler<String>,
+}
+
+#[component]
+pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
+    let mut is_open = props.is_open;
+    let mut name = use_signal(|| String::new());
+
+    use_effect(move || {
+        let current_is_open = is_open();
+        #[cfg(target_arch = "wasm32")]
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let Some(body) = document.body() {
+                    if current_is_open {
+                        let _ = body.set_attribute("style", "overflow: hidden;");
+                    } else {
+                        let _ = body.remove_attribute("style");
+                    }
+                }
+            }
+        }
+    });
+
+    if !is_open() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "modal-overlay fade-in",
+            style: "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 1000; display: flex; align-items: center; justify-content: center;",
+            onclick: move |e| {
+                e.stop_propagation();
+                is_open.set(false);
+            },
+
+            div {
+                class: "glass slide-up",
+                style: "width: 90%; max-width: 400px; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);",
+                onclick: move |e| e.stop_propagation(),
+
+                h2 {
+                    style: "font-size: 24px; font-weight: 800; margin: 0; color: white;",
+                    "New Collection"
+                }
+
+                input {
+                    type: "text",
+                    placeholder: "Collection name...",
+                    value: "{name}",
+                    autofocus: "true",
+                    style: "width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 12px; color: white; font-size: 16px; outline: none;",
+                    oninput: move |e| name.set(e.value().clone()),
+                    onkeydown: move |e| {
+                        if e.key() == Key::Enter && !name().trim().is_empty() {
+                            props.on_create.call(name().clone());
+                            name.set(String::new());
+                            is_open.set(false);
+                        }
+                    }
+                }
+
+                div {
+                    style: "display: flex; gap: 12px; justify-content: flex-end;",
+                    button {
+                        class: "glow-hover",
+                        style: "padding: 12px 24px; border-radius: 12px; background: transparent; color: white; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;",
+                        onclick: move |_| is_open.set(false),
+                        "Cancel"
+                    }
+                    button {
+                        class: "glow-hover",
+                        style: "padding: 12px 24px; border-radius: 12px; background: var(--accent-primary); color: white; font-weight: 600; border: none; cursor: pointer;",
+                        disabled: name().trim().is_empty(),
+                        onclick: move |_| {
+                            if !name().trim().is_empty() {
+                                props.on_create.call(name().clone());
+                                name.set(String::new());
+                                is_open.set(false);
+                            }
+                        },
+                        "Create"
                     }
                 }
             }

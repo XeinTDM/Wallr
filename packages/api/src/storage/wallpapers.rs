@@ -1,13 +1,16 @@
-use crate::Wallpaper;
 use super::cache::{get_wallpaper_cache, get_wallpaper_list_cache};
 use super::get_pool;
+use crate::Wallpaper;
 
 pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
     let pool = get_pool()?;
+
+    let embed = wallpaper.embedding.clone().map(pgvector::Vector::from);
+
     sqlx::query!(
         r#"
-        INSERT INTO wallpapers (id, title, author, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO wallpapers (id, title, author, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (id) DO UPDATE SET
             title = EXCLUDED.title,
             author = EXCLUDED.author,
@@ -20,7 +23,9 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
             size_bytes = EXCLUDED.size_bytes,
             likes = EXCLUDED.likes,
             downloads = EXCLUDED.downloads,
-            is_private = EXCLUDED.is_private
+            is_private = EXCLUDED.is_private,
+            is_live = EXCLUDED.is_live,
+            embedding = EXCLUDED.embedding
         "#,
         wallpaper.id,
         wallpaper.title,
@@ -35,7 +40,9 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
         wallpaper.likes as i32,
         wallpaper.downloads as i32,
         wallpaper.created_at,
-        wallpaper.is_private
+        wallpaper.is_private,
+        wallpaper.is_live,
+        embed as _
     )
     .execute(pool)
     .await?;
@@ -56,6 +63,7 @@ fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     let downloads: i32 = row.get("downloads");
     let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
     let is_private: bool = row.get("is_private");
+    let is_live: bool = row.try_get("is_live").unwrap_or(false);
 
     Wallpaper {
         id: row.get("id"),
@@ -71,6 +79,8 @@ fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
         downloads: downloads as u32,
         created_at,
         is_private,
+        is_live,
+        embedding: None,
     }
 }
 
@@ -79,17 +89,29 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
 
     if !filters.resolution.is_empty() {
         match filters.resolution.as_str() {
-            "4k" => { q.push(" AND width >= 3840 AND height >= 2160"); },
-            "8k" => { q.push(" AND width >= 7680 AND height >= 4320"); },
-            "hd" => { q.push(" AND width >= 1920 AND height >= 1080"); },
+            "4k" => {
+                q.push(" AND width >= 3840 AND height >= 2160");
+            }
+            "8k" => {
+                q.push(" AND width >= 7680 AND height >= 4320");
+            }
+            "hd" => {
+                q.push(" AND width >= 1920 AND height >= 1080");
+            }
             _ => {}
         }
     }
     if !filters.aspect_ratio.is_empty() {
         match filters.aspect_ratio.as_str() {
-            "ultrawide" => { q.push(" AND (width::float / height::float) >= 2.3"); },
-            "desktop" => { q.push(" AND (width::float / height::float) >= 1.3 AND (width::float / height::float) < 2.3"); },
-            "mobile" => { q.push(" AND (width::float / height::float) < 1.0"); },
+            "ultrawide" => {
+                q.push(" AND (width::float / height::float) >= 2.3");
+            }
+            "desktop" => {
+                q.push(" AND (width::float / height::float) >= 1.3 AND (width::float / height::float) < 2.3");
+            }
+            "mobile" => {
+                q.push(" AND (width::float / height::float) < 1.0");
+            }
             _ => {}
         }
     }
@@ -99,17 +121,29 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
     }
     if !filters.ai_filter.is_empty() {
         match filters.ai_filter.as_str() {
-            "hide" => { q.push(" AND NOT (tags @> '[\"ai\"]')"); },
-            "only" => { q.push(" AND tags @> '[\"ai\"]'"); },
+            "hide" => {
+                q.push(" AND NOT (tags @> '[\"ai\"]')");
+            }
+            "only" => {
+                q.push(" AND tags @> '[\"ai\"]'");
+            }
             _ => {}
         }
     }
     if !filters.timeframe.is_empty() {
         match filters.timeframe.as_str() {
-            "daily" => { q.push(" AND created_at >= NOW() - INTERVAL '1 day'"); },
-            "weekly" => { q.push(" AND created_at >= NOW() - INTERVAL '7 days'"); },
-            "monthly" => { q.push(" AND created_at >= NOW() - INTERVAL '30 days'"); },
-            "yearly" => { q.push(" AND created_at >= NOW() - INTERVAL '1 year'"); },
+            "daily" => {
+                q.push(" AND created_at >= NOW() - INTERVAL '1 day'");
+            }
+            "weekly" => {
+                q.push(" AND created_at >= NOW() - INTERVAL '7 days'");
+            }
+            "monthly" => {
+                q.push(" AND created_at >= NOW() - INTERVAL '30 days'");
+            }
+            "yearly" => {
+                q.push(" AND created_at >= NOW() - INTERVAL '1 year'");
+            }
             _ => {}
         }
     }
@@ -133,9 +167,15 @@ pub async fn load_all_wallpapers(
     apply_filters(&mut q, &filters);
 
     match filters.sort.as_str() {
-        "downloads" => { q.push(" ORDER BY downloads DESC"); },
-        "rating" => { q.push(" ORDER BY likes DESC"); },
-        "date" | _ => { q.push(" ORDER BY created_at DESC"); },
+        "downloads" => {
+            q.push(" ORDER BY downloads DESC");
+        }
+        "rating" => {
+            q.push(" ORDER BY likes DESC");
+        }
+        "date" | _ => {
+            q.push(" ORDER BY created_at DESC");
+        }
     }
 
     q.push(" LIMIT ");
@@ -158,7 +198,7 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
     }
 
     let pool = get_pool()?;
-    let row = sqlx::query!(r#"SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private FROM wallpapers WHERE id = $1"#, id)
+    let row = sqlx::query!(r#"SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers WHERE id = $1"#, id)
         .fetch_optional(pool)
         .await?;
 
@@ -176,6 +216,8 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
         downloads: r.downloads.unwrap_or(0) as u32,
         created_at: r.created_at,
         is_private: r.is_private,
+        is_live: r.is_live,
+        embedding: None,
     });
     cache.insert(id.to_string(), result.clone()).await;
     Ok(result)
@@ -202,9 +244,15 @@ pub async fn get_wallpapers_by_tag(
     apply_filters(&mut q, &filters);
 
     match filters.sort.as_str() {
-        "downloads" => { q.push(" ORDER BY downloads DESC"); },
-        "rating" => { q.push(" ORDER BY likes DESC"); },
-        "date" | _ => { q.push(" ORDER BY created_at DESC"); },
+        "downloads" => {
+            q.push(" ORDER BY downloads DESC");
+        }
+        "rating" => {
+            q.push(" ORDER BY likes DESC");
+        }
+        "date" | _ => {
+            q.push(" ORDER BY created_at DESC");
+        }
     }
 
     q.push(" LIMIT ");
@@ -260,7 +308,7 @@ pub async fn get_user_favorites(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private FROM wallpapers w
+        SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
         INNER JOIN user_favorites f ON w.id = f.wallpaper_id
         WHERE f.user_id = $1
         ORDER BY w.created_at DESC
@@ -273,21 +321,26 @@ pub async fn get_user_favorites(
     .fetch_all(pool)
     .await?;
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(|r| Wallpaper {
-        id: r.id,
-        title: r.title,
-        author: r.author,
-        image_url: r.image_url,
-        thumbnail_url: r.thumbnail_url,
-        tags: r.tags.0,
-        primary_colors: r.primary_colors.0,
-        dimensions: (r.width as u32, r.height as u32),
-        size_bytes: r.size_bytes as u64,
-        likes: r.likes.unwrap_or(0) as u32,
-        downloads: r.downloads.unwrap_or(0) as u32,
-        created_at: r.created_at,
-        is_private: r.is_private,
-    }).collect();
+    let results: Vec<Wallpaper> = rows
+        .into_iter()
+        .map(|r| Wallpaper {
+            id: r.id,
+            title: r.title,
+            author: r.author,
+            image_url: r.image_url,
+            thumbnail_url: r.thumbnail_url,
+            tags: r.tags.0,
+            primary_colors: r.primary_colors.0,
+            dimensions: (r.width as u32, r.height as u32),
+            size_bytes: r.size_bytes as u64,
+            likes: r.likes.unwrap_or(0) as u32,
+            downloads: r.downloads.unwrap_or(0) as u32,
+            created_at: r.created_at,
+            is_private: r.is_private,
+            is_live: r.is_live,
+            embedding: None,
+        })
+        .collect();
     let arc_results = std::sync::Arc::new(results);
     Ok(arc_results)
 }
@@ -323,7 +376,7 @@ pub async fn get_user_uploads(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private FROM wallpapers
+        SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers
         WHERE author = $1
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
@@ -335,21 +388,26 @@ pub async fn get_user_uploads(
     .fetch_all(pool)
     .await?;
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(|r| Wallpaper {
-        id: r.id,
-        title: r.title,
-        author: r.author,
-        image_url: r.image_url,
-        thumbnail_url: r.thumbnail_url,
-        tags: r.tags.0,
-        primary_colors: r.primary_colors.0,
-        dimensions: (r.width as u32, r.height as u32),
-        size_bytes: r.size_bytes as u64,
-        likes: r.likes.unwrap_or(0) as u32,
-        downloads: r.downloads.unwrap_or(0) as u32,
-        created_at: r.created_at,
-        is_private: r.is_private,
-    }).collect();
+    let results: Vec<Wallpaper> = rows
+        .into_iter()
+        .map(|r| Wallpaper {
+            id: r.id,
+            title: r.title,
+            author: r.author,
+            image_url: r.image_url,
+            thumbnail_url: r.thumbnail_url,
+            tags: r.tags.0,
+            primary_colors: r.primary_colors.0,
+            dimensions: (r.width as u32, r.height as u32),
+            size_bytes: r.size_bytes as u64,
+            likes: r.likes.unwrap_or(0) as u32,
+            downloads: r.downloads.unwrap_or(0) as u32,
+            created_at: r.created_at,
+            is_private: r.is_private,
+            is_live: r.is_live,
+            embedding: None,
+        })
+        .collect();
     let arc_results = std::sync::Arc::new(results);
     cache.insert(cache_key, arc_results.clone()).await;
     Ok(arc_results)
@@ -358,35 +416,72 @@ pub async fn get_user_uploads(
 pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Result<bool> {
     let pool = get_pool()?;
 
-    let exists: Option<i32> =
-        sqlx::query_scalar!("SELECT 1 as result FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2", user_id, wallpaper_id)
-            .fetch_optional(pool)
-            .await?.flatten();
+    let exists: Option<i32> = sqlx::query_scalar!(
+        "SELECT 1 as result FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2",
+        user_id,
+        wallpaper_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .flatten();
 
     if exists.is_some() {
-        sqlx::query!("DELETE FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2", user_id, wallpaper_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2",
+            user_id,
+            wallpaper_id
+        )
+        .execute(pool)
+        .await?;
 
-        sqlx::query!("UPDATE wallpapers SET likes = likes - 1 WHERE id = $1", wallpaper_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE wallpapers SET likes = likes - 1 WHERE id = $1",
+            wallpaper_id
+        )
+        .execute(pool)
+        .await?;
 
-        super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_cache()
+            .remove(wallpaper_id)
+            .await;
         super::cache::get_wallpaper_list_cache().invalidate_all();
 
         Ok(false)
     } else {
-        sqlx::query!("INSERT INTO user_favorites (user_id, wallpaper_id) VALUES ($1, $2)", user_id, wallpaper_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "INSERT INTO user_favorites (user_id, wallpaper_id) VALUES ($1, $2)",
+            user_id,
+            wallpaper_id
+        )
+        .execute(pool)
+        .await?;
 
-        sqlx::query!("UPDATE wallpapers SET likes = likes + 1 WHERE id = $1", wallpaper_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE wallpapers SET likes = likes + 1 WHERE id = $1",
+            wallpaper_id
+        )
+        .execute(pool)
+        .await?;
 
-        super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_cache()
+            .remove(wallpaper_id)
+            .await;
         super::cache::get_wallpaper_list_cache().invalidate_all();
+
+        if let Ok(Some(wp)) = get_wallpaper_by_id(wallpaper_id).await {
+            if let Ok(Some(author_record)) = super::users::get_user_by_name(&wp.author).await {
+                if let Ok(Some(liker)) = super::users::get_user_by_id(user_id).await {
+                    if author_record.user.id != user_id {
+                        let _ = super::notifications::create_notification_db(
+                            &author_record.user.id,
+                            "New Like",
+                            &format!("{} liked your wallpaper '{}'", liker.user.name, wp.title),
+                        )
+                        .await;
+                    }
+                }
+            }
+        }
 
         Ok(true)
     }
@@ -394,10 +489,14 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
 
 pub async fn is_favorited(user_id: &str, wallpaper_id: &str) -> anyhow::Result<bool> {
     let pool = get_pool()?;
-    let exists: Option<i32> =
-        sqlx::query_scalar!("SELECT 1 as result FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2", user_id, wallpaper_id)
-            .fetch_optional(pool)
-            .await?.flatten();
+    let exists: Option<i32> = sqlx::query_scalar!(
+        "SELECT 1 as result FROM user_favorites WHERE user_id = $1 AND wallpaper_id = $2",
+        user_id,
+        wallpaper_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .flatten();
     Ok(exists.is_some())
 }
 
@@ -410,14 +509,75 @@ pub async fn increment_download(id: &str, ip: &str) -> anyhow::Result<()> {
     cache.insert(key, true).await;
 
     let pool = get_pool()?;
-    sqlx::query!("UPDATE wallpapers SET downloads = downloads + 1 WHERE id = $1", id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE wallpapers SET downloads = downloads + 1 WHERE id = $1",
+        id
+    )
+    .execute(pool)
+    .await?;
 
     super::cache::get_wallpaper_cache().remove(id).await;
     super::cache::get_wallpaper_list_cache().invalidate_all();
 
     Ok(())
+}
+
+pub async fn record_user_download_db(user_id: &str, wallpaper_id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "INSERT INTO user_downloads (user_id, wallpaper_id) VALUES ($1, $2) ON CONFLICT (user_id, wallpaper_id) DO UPDATE SET downloaded_at = NOW()",
+        user_id, wallpaper_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_user_download_history_db(
+    user_id: &str,
+    page: u32,
+    limit: u32,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
+    let pool = get_pool()?;
+    let offset = page * limit;
+    let rows = sqlx::query!(
+        r#"
+        SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
+        FROM wallpapers w
+        INNER JOIN user_downloads d ON w.id = d.wallpaper_id
+        WHERE d.user_id = $1
+        ORDER BY d.downloaded_at DESC
+        LIMIT $2 OFFSET $3
+        "#,
+        user_id,
+        limit as i64,
+        offset as i64
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let results: Vec<Wallpaper> = rows
+        .into_iter()
+        .map(|r| Wallpaper {
+            id: r.id,
+            title: r.title,
+            author: r.author,
+            image_url: r.image_url,
+            thumbnail_url: r.thumbnail_url,
+            tags: r.tags.0,
+            primary_colors: r.primary_colors.0,
+            dimensions: (r.width as u32, r.height as u32),
+            size_bytes: r.size_bytes as u64,
+            likes: r.likes.unwrap_or(0) as u32,
+            downloads: r.downloads.unwrap_or(0) as u32,
+            created_at: r.created_at,
+            is_private: r.is_private,
+            is_live: r.is_live,
+            embedding: None,
+        })
+        .collect();
+    let arc_results = std::sync::Arc::new(results);
+    Ok(arc_results)
 }
 
 pub async fn search_wallpapers_db(
@@ -433,32 +593,65 @@ pub async fn search_wallpapers_db(
     }
 
     let pool = get_pool()?;
-
     let offset = page * limit;
 
-    let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE search_vector @@ websearch_to_tsquery('english', ");
-    q.push_bind(query);
-    q.push(")");
-    
+    let mut embed_opt = None;
+    if !query.is_empty() {
+        if let Some(tagger) = crate::ai::TAGGER.get() {
+            if let Ok(embed) = tagger.get_text_embedding(query) {
+                embed_opt = Some(pgvector::Vector::from(embed));
+            }
+        }
+    }
+
+    let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE 1=1");
+
+    if embed_opt.is_none() && !query.is_empty() {
+        q.push(" AND search_vector @@ websearch_to_tsquery('english', ");
+        q.push_bind(query);
+        q.push(")");
+    }
+
     apply_filters(&mut q, &filters);
 
-    match filters.sort.as_str() {
-        "downloads" => {
-            q.push(" ORDER BY downloads DESC, ts_rank(search_vector, websearch_to_tsquery('english', ");
-            q.push_bind(query);
-            q.push(")) DESC");
-        },
-        "rating" => {
-            q.push(" ORDER BY likes DESC, ts_rank(search_vector, websearch_to_tsquery('english', ");
-            q.push_bind(query);
-            q.push(")) DESC");
-        },
-        "date" => { q.push(" ORDER BY created_at DESC"); },
-        _ => {
-            q.push(" ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', ");
-            q.push_bind(query);
-            q.push(")) DESC");
-        },
+    if let Some(embed) = embed_opt {
+        q.push(" ORDER BY embedding <=> ");
+        q.push_bind(embed);
+    } else if !query.is_empty() {
+        match filters.sort.as_str() {
+            "downloads" => {
+                q.push(" ORDER BY downloads DESC, ts_rank(search_vector, websearch_to_tsquery('english', ");
+                q.push_bind(query);
+                q.push(")) DESC");
+            }
+            "rating" => {
+                q.push(
+                    " ORDER BY likes DESC, ts_rank(search_vector, websearch_to_tsquery('english', ",
+                );
+                q.push_bind(query);
+                q.push(")) DESC");
+            }
+            "date" => {
+                q.push(" ORDER BY created_at DESC");
+            }
+            _ => {
+                q.push(" ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', ");
+                q.push_bind(query);
+                q.push(")) DESC");
+            }
+        }
+    } else {
+        match filters.sort.as_str() {
+            "downloads" => {
+                q.push(" ORDER BY downloads DESC");
+            }
+            "rating" => {
+                q.push(" ORDER BY likes DESC");
+            }
+            "date" | _ => {
+                q.push(" ORDER BY created_at DESC");
+            }
+        }
     }
 
     q.push(" LIMIT ");
@@ -497,7 +690,9 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
         .execute(pool)
         .await?;
 
-        super::cache::get_wallpaper_cache().remove(wallpaper_id).await;
+        super::cache::get_wallpaper_cache()
+            .remove(wallpaper_id)
+            .await;
         super::cache::get_wallpaper_list_cache().invalidate_all();
     }
 
@@ -506,27 +701,27 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
 
 pub async fn delete_wallpaper(id: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    
+
     let mut tx = pool.begin().await?;
-    
+
     sqlx::query!("DELETE FROM user_favorites WHERE wallpaper_id = $1", id)
         .execute(&mut *tx)
         .await?;
-        
+
     sqlx::query!("DELETE FROM wallpapers WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
-        
+
     tx.commit().await?;
-    
+
     super::cache::get_wallpaper_cache().remove(id).await;
     super::cache::get_wallpaper_list_cache().invalidate_all();
-    
+
     let storage_path = super::files::get_storage_path();
     let _ = tokio::fs::remove_file(storage_path.join(format!("{}_master.jpg", id))).await;
     let _ = tokio::fs::remove_file(storage_path.join(format!("{}_master.avif", id))).await;
     let _ = tokio::fs::remove_file(storage_path.join(format!("{}_thumb.jpg", id))).await;
-    
+
     Ok(())
 }
 
@@ -545,7 +740,7 @@ pub async fn get_public_uploads(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private FROM wallpapers
+        SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers
         WHERE author = $1 AND is_private = false
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
@@ -557,27 +752,34 @@ pub async fn get_public_uploads(
     .fetch_all(pool)
     .await?;
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(|r| Wallpaper {
-        id: r.id,
-        title: r.title,
-        author: r.author,
-        image_url: r.image_url,
-        thumbnail_url: r.thumbnail_url,
-        tags: r.tags.0,
-        primary_colors: r.primary_colors.0,
-        dimensions: (r.width as u32, r.height as u32),
-        size_bytes: r.size_bytes as u64,
-        likes: r.likes.unwrap_or(0) as u32,
-        downloads: r.downloads.unwrap_or(0) as u32,
-        created_at: r.created_at,
-        is_private: r.is_private,
-    }).collect();
+    let results: Vec<Wallpaper> = rows
+        .into_iter()
+        .map(|r| Wallpaper {
+            id: r.id,
+            title: r.title,
+            author: r.author,
+            image_url: r.image_url,
+            thumbnail_url: r.thumbnail_url,
+            tags: r.tags.0,
+            primary_colors: r.primary_colors.0,
+            dimensions: (r.width as u32, r.height as u32),
+            size_bytes: r.size_bytes as u64,
+            likes: r.likes.unwrap_or(0) as u32,
+            downloads: r.downloads.unwrap_or(0) as u32,
+            created_at: r.created_at,
+            is_private: r.is_private,
+            is_live: r.is_live,
+            embedding: None,
+        })
+        .collect();
     let arc_results = std::sync::Arc::new(results);
     cache.insert(cache_key, arc_results.clone()).await;
     Ok(arc_results)
 }
 
-pub async fn get_creator_analytics_db(author_name: &str) -> anyhow::Result<crate::CreatorAnalytics> {
+pub async fn get_creator_analytics_db(
+    author_name: &str,
+) -> anyhow::Result<crate::CreatorAnalytics> {
     let pool = get_pool()?;
 
     let row = sqlx::query!(
@@ -603,12 +805,14 @@ pub async fn get_creator_analytics_db(author_name: &str) -> anyhow::Result<crate
 
 pub async fn get_admin_stats_db() -> anyhow::Result<crate::AdminStats> {
     let pool = get_pool()?;
-    
+
     let w_stats = sqlx::query!(
         "SELECT COUNT(*) as wp_count, COALESCE(SUM(downloads), 0) as total_downloads, COALESCE(SUM(likes), 0) as total_likes FROM wallpapers"
     ).fetch_one(pool).await?;
 
-    let u_stats = sqlx::query!("SELECT COUNT(*) as user_count FROM users").fetch_one(pool).await?;
+    let u_stats = sqlx::query!("SELECT COUNT(*) as user_count FROM users")
+        .fetch_one(pool)
+        .await?;
 
     Ok(crate::AdminStats {
         total_users: u_stats.user_count.unwrap_or(0) as u32,
@@ -654,4 +858,194 @@ pub async fn report_wallpaper_db(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+pub async fn get_reported_wallpapers_db(
+    status: Option<&str>,
+) -> anyhow::Result<Vec<crate::ReportedWallpaper>> {
+    let pool = get_pool()?;
+
+    let mut results = Vec::new();
+
+    if let Some(s) = status {
+        let rows = sqlx::query!(
+            r#"
+            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.created_at,
+                   u.name as reporter_name, w.thumbnail_url as wallpaper_thumbnail
+            FROM reported_wallpapers r
+            JOIN users u ON r.reporter_id = u.id
+            LEFT JOIN wallpapers w ON r.wallpaper_id = w.id
+            WHERE r.status = $1
+            ORDER BY r.created_at DESC
+            "#,
+            s
+        )
+        .fetch_all(pool)
+        .await?;
+
+        for r in rows {
+            results.push(crate::ReportedWallpaper {
+                id: r.id,
+                wallpaper_id: r.wallpaper_id,
+                reporter_id: r.reporter_id,
+                reporter_name: r.reporter_name,
+                reason: r.reason,
+                status: r.status,
+                created_at: r.created_at,
+                wallpaper_thumbnail: Some(r.wallpaper_thumbnail),
+            });
+        }
+    } else {
+        let rows = sqlx::query!(
+            r#"
+            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.created_at,
+                   u.name as reporter_name, w.thumbnail_url as wallpaper_thumbnail
+            FROM reported_wallpapers r
+            JOIN users u ON r.reporter_id = u.id
+            LEFT JOIN wallpapers w ON r.wallpaper_id = w.id
+            ORDER BY r.created_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        for r in rows {
+            results.push(crate::ReportedWallpaper {
+                id: r.id,
+                wallpaper_id: r.wallpaper_id,
+                reporter_id: r.reporter_id,
+                reporter_name: r.reporter_name,
+                reason: r.reason,
+                status: r.status,
+                created_at: r.created_at,
+                wallpaper_thumbnail: Some(r.wallpaper_thumbnail),
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+pub async fn resolve_report_db(
+    report_id: &str,
+    action: &str,
+    admin_id: &str,
+    admin_name: &str,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+
+    let report = sqlx::query!(
+        "SELECT wallpaper_id FROM reported_wallpapers WHERE id = $1",
+        report_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let wallpaper_id = match report {
+        Some(r) => r.wallpaper_id,
+        None => return Err(anyhow::anyhow!("Report not found")),
+    };
+
+    if action == "delete_wallpaper" {
+        delete_wallpaper(&wallpaper_id).await?;
+        sqlx::query!(
+            "UPDATE reported_wallpapers SET status = 'resolved_deleted' WHERE id = $1",
+            report_id
+        )
+        .execute(pool)
+        .await?;
+
+        crate::storage::log_audit_action_db(
+            admin_id,
+            admin_name,
+            "DELETE_REPORTED_WALLPAPER",
+            &wallpaper_id,
+            "WALLPAPER",
+            Some(&format!("From report {}", report_id)),
+        )
+        .await?;
+    } else if action == "dismiss" {
+        sqlx::query!(
+            "UPDATE reported_wallpapers SET status = 'dismissed' WHERE id = $1",
+            report_id
+        )
+        .execute(pool)
+        .await?;
+
+        crate::storage::log_audit_action_db(
+            admin_id,
+            admin_name,
+            "DISMISS_REPORT",
+            report_id,
+            "REPORT",
+            None,
+        )
+        .await?;
+    } else {
+        return Err(anyhow::anyhow!("Invalid action"));
+    }
+
+    Ok(())
+}
+
+pub async fn get_similar_wallpapers_db(
+    id: &str,
+    limit: u32,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
+    let pool = get_pool()?;
+
+    // First get the embedding of the target wallpaper
+    let target = sqlx::query!(
+        "SELECT embedding as \"embedding?: pgvector::Vector\" FROM wallpapers WHERE id = $1",
+        id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let embedding: Option<pgvector::Vector> = match target {
+        Some(r) => r.embedding,
+        None => return Ok(std::sync::Arc::new(vec![])),
+    };
+
+    if let Some(embed) = embedding {
+        let limit = limit as i64;
+        let rows = sqlx::query!(
+            r#"
+            SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live 
+            FROM wallpapers 
+            WHERE id != $1 AND is_private = false
+            ORDER BY embedding <=> $2 
+            LIMIT $3
+            "#,
+            id,
+            embed as _,
+            limit
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let results: Vec<Wallpaper> = rows
+            .into_iter()
+            .map(|r| Wallpaper {
+                id: r.id,
+                title: r.title,
+                author: r.author,
+                image_url: r.image_url,
+                thumbnail_url: r.thumbnail_url,
+                tags: r.tags.0,
+                primary_colors: r.primary_colors.0,
+                dimensions: (r.width as u32, r.height as u32),
+                size_bytes: r.size_bytes as u64,
+                likes: r.likes.unwrap_or(0) as u32,
+                downloads: r.downloads.unwrap_or(0) as u32,
+                created_at: r.created_at,
+                is_private: r.is_private,
+                is_live: r.is_live,
+                embedding: None,
+            })
+            .collect();
+        return Ok(std::sync::Arc::new(results));
+    }
+
+    Ok(std::sync::Arc::new(vec![]))
 }

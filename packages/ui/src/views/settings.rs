@@ -1,8 +1,7 @@
 use crate::app::Route;
+use crate::{LoadingScreen, use_toaster};
 use dioxus::prelude::*;
 use lucide_dioxus::{Bell, Camera, CloudDownload, Eye, Palette, ShieldAlert, User};
-use crate::{LoadingScreen, use_toaster};
-
 
 const SETTINGS_CSS: Asset = asset!("/assets/styling/settings.css");
 
@@ -58,7 +57,9 @@ pub fn Settings() -> Element {
             nav.push(Route::Login {});
             return rsx! {};
         }
-        crate::app::AuthState::Authenticated(u) => (u.name, u.email, u.pfp_url, u.bio, u.social_links),
+        crate::app::AuthState::Authenticated(u) => {
+            (u.name, u.email, u.pfp_url, u.bio, u.social_links)
+        }
     };
 
     let mut active_tab = use_signal(|| SettingsTab::Account);
@@ -68,10 +69,25 @@ pub fn Settings() -> Element {
     let mut email = use_signal(move || real_email.clone());
     let mut bio = use_signal(move || real_bio.clone().unwrap_or_default());
     let socials_1 = real_socials.clone();
-    let mut x_url = use_signal(move || socials_1.clone().and_then(|s| s.get("x").cloned()).unwrap_or_default());
+    let mut x_url = use_signal(move || {
+        socials_1
+            .clone()
+            .and_then(|s| s.get("x").cloned())
+            .unwrap_or_default()
+    });
     let socials_2 = real_socials.clone();
-    let mut github_url = use_signal(move || socials_2.clone().and_then(|s| s.get("github").cloned()).unwrap_or_default());
-    let mut instagram_url = use_signal(move || real_socials.clone().and_then(|s| s.get("instagram").cloned()).unwrap_or_default());
+    let mut github_url = use_signal(move || {
+        socials_2
+            .clone()
+            .and_then(|s| s.get("github").cloned())
+            .unwrap_or_default()
+    });
+    let mut instagram_url = use_signal(move || {
+        real_socials
+            .clone()
+            .and_then(|s| s.get("instagram").cloned())
+            .unwrap_or_default()
+    });
 
     let mut current_password = use_signal(String::new);
     let mut new_password = use_signal(String::new);
@@ -252,7 +268,7 @@ pub fn Settings() -> Element {
                                 let x_val = x_url();
                                 let gh_val = github_url();
                                 let ig_val = instagram_url();
-                                
+
                                 let mut socials = std::collections::HashMap::new();
                                 if !x_val.trim().is_empty() { socials.insert("x".to_string(), x_val); }
                                 if !gh_val.trim().is_empty() { socials.insert("github".to_string(), gh_val); }

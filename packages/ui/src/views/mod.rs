@@ -60,3 +60,15 @@ pub use admin::Admin;
 
 mod admin_users;
 pub use admin_users::*;
+
+mod admin_reports;
+pub use admin_reports::*;
+
+mod forgot_password;
+pub use forgot_password::*;
+
+mod reset_password;
+pub use reset_password::*;
+
+mod follows;
+pub use follows::*;

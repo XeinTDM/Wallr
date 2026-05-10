@@ -35,10 +35,8 @@ fn main() {
             .with_cfg(
                 Config::new()
                     .with_data_directory(
-                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                            .join(".desktop_data")
+                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".desktop_data"),
                     )
-
                     .with_window(
                         WindowBuilder::new()
                             .with_title("Wallr - Premium Wallpaper Engine")
@@ -88,13 +86,16 @@ fn App() -> Element {
     #[cfg(feature = "desktop")]
     dioxus::desktop::use_asset_handler("upload", move |req, responder| {
         let path = req.uri().path();
-        let file_name = path.strip_prefix("/upload/").unwrap_or(path).trim_start_matches('/');
+        let file_name = path
+            .strip_prefix("/upload/")
+            .unwrap_or(path)
+            .trim_start_matches('/');
         let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../ui/assets/uploads")
             .join(file_name);
-        
+
         let data = std::fs::read(&full_path).unwrap_or_default();
-        
+
         let response = dioxus::desktop::wry::http::Response::builder()
             .header("Content-Type", "image/avif")
             .header("Access-Control-Allow-Origin", "*")

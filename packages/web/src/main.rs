@@ -72,8 +72,14 @@ fn main() {
 
             let download_id = id.clone();
             let download_ip = ip.clone();
+            let token_opt = extract_session_token(&headers);
             tokio::spawn(async move {
                 let _ = api::storage::increment_download(&download_id, &download_ip).await;
+                if let Some(token_str) = token_opt {
+                    if let Ok(user) = api::storage::verify_token(&token_str).await {
+                        let _ = api::storage::record_user_download_db(&user.id, &download_id).await;
+                    }
+                }
             });
 
             let is_native_format = format == "avif" || format == "jpg" || format == "jpeg";

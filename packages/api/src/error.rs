@@ -53,16 +53,22 @@ impl ApiError {
             }
             ApiError::Unexpected(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("Too many") || err_str.contains("User not found") || err_str.contains("Token revoked") {
+                if err_str.contains("Too many")
+                    || err_str.contains("User not found")
+                    || err_str.contains("Token revoked")
+                {
                     dioxus::prelude::ServerFnError::new(err_str)
                 } else {
                     eprintln!("Unexpected internal error: {:?}", e);
                     dioxus::prelude::ServerFnError::new("Internal Server Error")
                 }
             }
-            ApiError::Auth(msg) | ApiError::RateLimited(msg) | ApiError::BadRequest(msg) | ApiError::NotFound(msg) | ApiError::Image(msg) | ApiError::Ai(msg) => {
-                dioxus::prelude::ServerFnError::new(msg)
-            }
+            ApiError::Auth(msg)
+            | ApiError::RateLimited(msg)
+            | ApiError::BadRequest(msg)
+            | ApiError::NotFound(msg)
+            | ApiError::Image(msg)
+            | ApiError::Ai(msg) => dioxus::prelude::ServerFnError::new(msg),
         }
     }
 }
@@ -74,28 +80,45 @@ impl axum::response::IntoResponse for ApiError {
         let (status, msg) = match self {
             ApiError::Database(e) => {
                 eprintln!("Database error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal Server Error".to_string(),
+                )
             }
             ApiError::Io(e) => {
                 eprintln!("IO error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal Server Error".to_string(),
+                )
             }
             ApiError::Serialization(e) => {
                 eprintln!("Serialization error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal Server Error".to_string(),
+                )
             }
             ApiError::Unexpected(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("Too many") || err_str.contains("User not found") || err_str.contains("Token revoked") {
+                if err_str.contains("Too many")
+                    || err_str.contains("User not found")
+                    || err_str.contains("Token revoked")
+                {
                     (StatusCode::BAD_REQUEST, err_str)
                 } else {
                     eprintln!("Unexpected internal error: {:?}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string())
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Internal Server Error".to_string(),
+                    )
                 }
             }
             ApiError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg),
             ApiError::RateLimited(msg) => (StatusCode::TOO_MANY_REQUESTS, msg),
-            ApiError::BadRequest(msg) | ApiError::Image(msg) | ApiError::Ai(msg) => (StatusCode::BAD_REQUEST, msg),
+            ApiError::BadRequest(msg) | ApiError::Image(msg) | ApiError::Ai(msg) => {
+                (StatusCode::BAD_REQUEST, msg)
+            }
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
         };
         (status, msg).into_response()

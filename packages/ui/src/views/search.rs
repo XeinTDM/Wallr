@@ -1,7 +1,6 @@
+use crate::{CategoryHero, WallpaperGrid};
 use api::search_wallpapers;
 use dioxus::prelude::*;
-use crate::{CategoryHero, WallpaperGrid};
-
 
 #[component]
 pub fn Search(query: String) -> Element {
@@ -29,7 +28,9 @@ pub fn Search(query: String) -> Element {
             timeframe: timeframe(),
         };
         async move {
-            if !has_more() { return; }
+            if !has_more() {
+                return;
+            }
             let p = page();
             if let Ok(new_wps) = search_wallpapers(query, p, 20, filters).await {
                 if new_wps.is_empty() {
@@ -53,7 +54,7 @@ pub fn Search(query: String) -> Element {
             color,
             ai_filter,
             timeframe,
-            WallpaperGrid { 
+            WallpaperGrid {
                 wallpapers: all_wallpapers,
                 is_loading: _fetch().is_none(),
                 on_end_reached: move |_| { if has_more() { page += 1 } },

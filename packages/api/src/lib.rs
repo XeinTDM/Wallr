@@ -94,6 +94,8 @@ pub struct Wallpaper {
     pub downloads: u32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub is_private: bool,
+    pub is_live: bool,
+    pub embedding: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -184,6 +186,18 @@ pub struct WallpaperComment {
     pub user_pfp: String,
     pub content: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReportedWallpaper {
+    pub id: String,
+    pub wallpaper_id: String,
+    pub reporter_id: String,
+    pub reporter_name: String,
+    pub reason: String,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub wallpaper_thumbnail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -372,64 +386,123 @@ pub async fn upload_raw_impl(
 ) -> anyhow::Result<String> {
     let original_bytes_len = bytes.len() as u64;
 
-    let (id, image_url, thumbnail_url, width, height, primary_colors, tags, img) =
-        tokio::task::spawn_blocking(move || {
+    let (
+        id,
+        image_url,
+        thumbnail_url,
+        width,
+        height,
+        primary_colors,
+        tags,
+        img_opt,
+        is_live,
+        embedding,
+    ) = tokio::task::spawn_blocking(move || {
+        let is_mp4 = bytes.len() > 8 && &bytes[4..8] == b"ftyp";
+        let is_webm = bytes.len() > 4 && bytes[0..4] == [0x1A, 0x45, 0xDF, 0xA3];
+        let is_live = is_mp4 || is_webm;
+
+        let id = blake3::hash(&bytes).to_hex().to_string();
+
+        let (img, final_image_url) = if is_live {
+            let ext = if is_mp4 { "mp4" } else { "webm" };
+            let image_url = crate::storage::save_image_file(&id, "master", ext, &bytes)?;
+
+            let temp_dir = std::env::temp_dir();
+            let video_path = temp_dir.join(format!("{}.{}", id, ext));
+            let thumb_path = temp_dir.join(format!("{}_thumb.jpg", id));
+            std::fs::write(&video_path, &bytes)?;
+
+            let status = std::process::Command::new("ffmpeg")
+                .arg("-i")
+                .arg(&video_path)
+                .arg("-vframes")
+                .arg("1")
+                .arg("-q:v")
+                .arg("2")
+                .arg("-y")
+                .arg(&thumb_path)
+                .status()
+                .map_err(|e| anyhow::anyhow!("Failed to run ffmpeg: {}", e))?;
+
+            if !status.success() {
+                return Err(anyhow::anyhow!("ffmpeg failed to extract frame"));
+            }
+
+            let thumb_bytes = std::fs::read(&thumb_path)?;
+            let img = ::image::load_from_memory(&thumb_bytes)
+                .map_err(|e| anyhow::anyhow!("Failed to decode thumbnail: {}", e))?;
+
+            let _ = std::fs::remove_file(video_path);
+            let _ = std::fs::remove_file(thumb_path);
+
+            (img, image_url)
+        } else {
             let img = ::image::load_from_memory(&bytes)
                 .map_err(|e| anyhow::anyhow!("Failed to decode image: {}", e))?;
-
-            let id = blake3::hash(&bytes).to_hex().to_string();
-            let (width, height) = (img.width(), img.height());
-
-            let primary_colors = crate::processor::extract_dominant_colors(&img);
-
-            let mut tags = if let Some(tagger) = crate::ai::TAGGER.get() {
-                tagger
-                    .tag_image(&img)
-                    .unwrap_or_else(|_| vec!["misc".to_string()])
-            } else {
-                vec!["misc".to_string()]
-            };
-
-            for ut in user_tags {
-                if !tags.contains(&ut) {
-                    tags.push(ut);
-                }
-            }
-
-            if width >= 7680 && height >= 4320 {
-                if !tags.contains(&"8k".to_string()) {
-                    tags.push("8k".to_string());
-                }
-            } else if width >= 3840 && height >= 2160 {
-                if !tags.contains(&"4k".to_string()) {
-                    tags.push("4k".to_string());
-                }
-            } else if width >= 2560 && height >= 1440 {
-                if !tags.contains(&"2k".to_string()) {
-                    tags.push("2k".to_string());
-                }
-            } else if width >= 1920 && height >= 1080 {
-                if !tags.contains(&"hd".to_string()) {
-                    tags.push("hd".to_string());
-                }
-            }
-
-            let thumb_data = crate::processor::generate_thumbnail(&img, 800);
             let image_url = crate::storage::save_image_file(&id, "master", "jpg", &bytes)?;
-            let thumbnail_url = crate::storage::save_image_file(&id, "thumb", "jpg", &thumb_data)?;
+            (img, image_url)
+        };
 
-            Ok::<_, anyhow::Error>((
-                id,
-                image_url,
-                thumbnail_url,
-                width,
-                height,
-                primary_colors,
-                tags,
-                img,
-            ))
-        })
-        .await??;
+        let (width, height) = (img.width(), img.height());
+
+        let primary_colors = crate::processor::extract_dominant_colors(&img);
+
+        let (mut tags, embedding) = if let Some(tagger) = crate::ai::TAGGER.get() {
+            tagger
+                .tag_image(&img)
+                .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512]))
+        } else {
+            (vec!["misc".to_string()], vec![0.0; 512])
+        };
+
+        for ut in user_tags {
+            if !tags.contains(&ut) {
+                tags.push(ut);
+            }
+        }
+
+        if is_live && !tags.contains(&"live".to_string()) {
+            tags.push("live".to_string());
+        }
+
+        if width >= 7680 && height >= 4320 {
+            if !tags.contains(&"8k".to_string()) {
+                tags.push("8k".to_string());
+            }
+        } else if width >= 3840 && height >= 2160 {
+            if !tags.contains(&"4k".to_string()) {
+                tags.push("4k".to_string());
+            }
+        } else if width >= 2560 && height >= 1440 {
+            if !tags.contains(&"2k".to_string()) {
+                tags.push("2k".to_string());
+            }
+        } else if width >= 1920 && height >= 1080 {
+            if !tags.contains(&"hd".to_string()) {
+                tags.push("hd".to_string());
+            }
+        }
+
+        let thumb_data = crate::processor::generate_thumbnail(&img, 800);
+        let thumbnail_url = crate::storage::save_image_file(&id, "thumb", "jpg", &thumb_data)?;
+
+        let final_img_opt = if is_live { None } else { Some(img) };
+
+        Ok::<_, anyhow::Error>((
+            id,
+            final_image_url,
+            thumbnail_url,
+            width,
+            height,
+            primary_colors,
+            tags,
+            final_img_opt,
+            is_live,
+            embedding,
+        ))
+    })
+    .await??;
 
     let wallpaper = Wallpaper {
         id: id.clone(),
@@ -445,34 +518,42 @@ pub async fn upload_raw_impl(
         downloads: 0,
         created_at: chrono::Utc::now(),
         is_private,
+        is_live,
+        embedding: Some(embedding),
     };
 
     crate::storage::save_wallpaper_data(&wallpaper).await?;
 
-    let bg_id = id.clone();
-    tokio::spawn(async move {
-        let avif_result =
-            tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img)).await;
+    if !is_live {
+        if let Some(img) = img_opt {
+            let bg_id = id.clone();
+            tokio::spawn(async move {
+                let avif_result =
+                    tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img))
+                        .await;
 
-        if let Ok(Ok(avif_data)) = avif_result {
-            let avif_url = crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data)
-                .unwrap_or_default();
-            if let Ok(pool) = crate::storage::get_pool() {
-                let size = avif_data.len() as i64;
-                let _ = sqlx::query!(
-                    "UPDATE wallpapers SET size_bytes = $1, image_url = $2 WHERE id = $3",
-                    size,
-                    avif_url,
-                    bg_id
-                )
-                .execute(pool)
-                .await;
-                crate::storage::cache::get_wallpaper_cache()
-                    .remove(&bg_id)
-                    .await;
-            }
+                if let Ok(Ok(avif_data)) = avif_result {
+                    let avif_url =
+                        crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data)
+                            .unwrap_or_default();
+                    if let Ok(pool) = crate::storage::get_pool() {
+                        let size = avif_data.len() as i64;
+                        let _ = sqlx::query!(
+                            "UPDATE wallpapers SET size_bytes = $1, image_url = $2 WHERE id = $3",
+                            size,
+                            avif_url,
+                            bg_id
+                        )
+                        .execute(pool)
+                        .await;
+                        crate::storage::cache::get_wallpaper_cache()
+                            .remove(&bg_id)
+                            .await;
+                    }
+                }
+            });
         }
-    });
+    }
 
     crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 
@@ -1289,6 +1370,24 @@ pub async fn report_wallpaper(wallpaper_id: String, reason: String) -> Result<()
 }
 
 #[server]
+pub async fn get_reported_wallpapers(
+    status: Option<String>,
+) -> Result<Vec<ReportedWallpaper>, ServerFnError> {
+    let _admin = require_moderator().await?;
+    crate::storage::get_reported_wallpapers_db(status.as_deref())
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn resolve_report(report_id: String, action: String) -> Result<(), ServerFnError> {
+    let admin = require_moderator().await?;
+    crate::storage::resolve_report_db(&report_id, &action, &admin.id, &admin.name)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
 pub async fn update_comment(comment_id: String, content: String) -> Result<(), ServerFnError> {
     let user = require_auth().await?;
     crate::storage::update_comment_db(&comment_id, &user.id, &content)
@@ -1311,7 +1410,7 @@ pub async fn delete_my_account() -> Result<(), ServerFnError> {
     crate::storage::delete_user(&user.id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
-    
+
     if let Some(ctx) = FullstackContext::current() {
         let cookie = "session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
         ctx.add_response_header(
@@ -1328,4 +1427,111 @@ pub async fn update_user_role(user_id: String, new_role: String) -> Result<(), S
     crate::storage::update_user_role_db(&user_id, &new_role)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn request_password_reset(email: String) -> Result<(), ServerFnError> {
+    let user_opt = crate::storage::get_user_by_email(&email)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(user_record) = user_opt {
+        let token = crate::storage::create_password_reset_token_db(&user_record.user.id)
+            .await
+            .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+        println!("----------------------------------------");
+        println!("PASSWORD RESET REQUESTED FOR: {}", email);
+        println!("Reset Link: http://localhost:8080/reset-password/{}", token);
+        println!("----------------------------------------");
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn reset_password_with_token(
+    token: String,
+    new_password: String,
+) -> Result<(), ServerFnError> {
+    let new_password_hash = tokio::task::spawn_blocking(move || {
+        use argon2::PasswordHasher;
+        let salt = argon2::password_hash::SaltString::generate(
+            &mut argon2::password_hash::rand_core::OsRng,
+        );
+        argon2::Argon2::default()
+            .hash_password(new_password.as_bytes(), &salt)
+            .map(|hash| hash.to_string())
+            .map_err(|e| format!("Hashing error: {}", e))
+    })
+    .await
+    .map_err(|_| ServerFnError::new("Task error"))?
+    .map_err(|e| ServerFnError::new(e))?;
+
+    crate::storage::consume_password_reset_token_db(&token, &new_password_hash)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_similar_wallpapers(
+    id: String,
+    limit: u32,
+) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
+    crate::storage::get_similar_wallpapers_db(&id, limit)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_user_download_history(
+    page: u32,
+    limit: u32,
+) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::get_user_download_history_db(&user.id, page, limit)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_followers(
+    username: String,
+    page: u32,
+    limit: u32,
+) -> Result<Vec<User>, ServerFnError> {
+    let limit_i64 = limit as i64;
+    let offset_i64 = (page * limit) as i64;
+
+    let target_user = crate::storage::get_user_by_name(&username)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
+        .ok_or_else(|| dioxus::prelude::ServerFnError::new("User not found"))?;
+
+    let followers = crate::storage::get_followers_db(&target_user.user.id, limit_i64, offset_i64)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(followers.into_iter().map(|u| u.user).collect())
+}
+
+#[server]
+pub async fn get_following(
+    username: String,
+    page: u32,
+    limit: u32,
+) -> Result<Vec<User>, ServerFnError> {
+    let limit_i64 = limit as i64;
+    let offset_i64 = (page * limit) as i64;
+
+    let target_user = crate::storage::get_user_by_name(&username)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
+        .ok_or_else(|| dioxus::prelude::ServerFnError::new("User not found"))?;
+
+    let following = crate::storage::get_following_db(&target_user.user.id, limit_i64, offset_i64)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(following.into_iter().map(|u| u.user).collect())
 }

@@ -1,7 +1,6 @@
+use crate::{CategoryHero, WallpaperGrid};
 use api::get_wallpapers;
 use dioxus::prelude::*;
-use crate::{CategoryHero, WallpaperGrid};
-
 
 #[component]
 pub fn PopularSelection() -> Element {

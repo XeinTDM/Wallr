@@ -23,7 +23,7 @@ pub fn ToastContainer() -> Element {
         div {
             id: "toast-container",
             style: "position: fixed; bottom: 32px; right: 32px; z-index: 9999;",
-            
+
             for (i, toast) in toasts.read().clone().into_iter().enumerate() {
                 {
                     let offset = toasts.read().len() - 1 - i;
@@ -31,7 +31,7 @@ pub fn ToastContainer() -> Element {
                     let scale = 1.0 - (offset as f64 * 0.05);
                     let opacity = if offset > 3 { 0.0 } else { 1.0 - (offset as f64 * 0.2) };
                     let z_index = 100 - offset;
-                    
+
                     rsx! {
                         div {
                             key: "{toast.id}",
@@ -46,7 +46,7 @@ pub fn ToastContainer() -> Element {
                                 translate_y, scale, opacity, z_index,
                                 if offset > 0 { "none" } else { "auto" }
                             ),
-                            span { 
+                            span {
                                 display: "flex",
                                 align_items: "center",
                                 match toast.kind {
@@ -77,7 +77,7 @@ pub fn ToastContainer() -> Element {
 
 pub fn use_toaster() -> Toaster {
     let toasts = use_context::<Signal<Vec<Toast>>>();
-    
+
     Toaster { toasts }
 }
 
@@ -103,16 +103,16 @@ impl Toaster {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        
+
         self.toasts.write().push(Toast { id, message, kind });
-        
+
         let mut toasts = self.toasts;
         spawn(async move {
             #[cfg(target_arch = "wasm32")]
             gloo_timers::future::TimeoutFuture::new(5000).await;
             #[cfg(not(target_arch = "wasm32"))]
             tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
-            
+
             toasts.with_mut(|list| list.retain(|t| t.id != id));
         });
     }

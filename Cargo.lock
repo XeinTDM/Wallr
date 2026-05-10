@@ -94,6 +94,7 @@ dependencies = [
  "image 0.24.9",
  "moka",
  "pasetors",
+ "pgvector",
  "rand 0.10.1",
  "ravif 0.11.20",
  "reqwest 0.13.3",
@@ -5233,6 +5234,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "pgvector"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ed92bf218dbe236609222dca0345767408ee7d5c93876c7fe09fa9b03f7249f"
+dependencies = [
+ "sqlx",
+]
+
+[[package]]
 name = "phf"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8022,6 +8032,7 @@ dependencies = [
  "api",
  "base64 0.22.1",
  "dioxus",
+ "getrandom 0.3.4",
  "gloo-events 0.3.0",
  "gloo-net 0.7.0",
  "gloo-timers 0.4.0",

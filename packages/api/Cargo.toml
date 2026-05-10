@@ -42,6 +42,7 @@ tokio-util = { version = "0.7", features = ["io"], optional = true }
 reqwest = { version = "0.13.3", optional = true }
 urlencoding = { version = "2.1", optional = true }
 rustrict = { version = "0.7.38", optional = true }
+pgvector = { version = "0.3.2", features = ["sqlx"], optional = true }
 
 [features]
 server = [
@@ -74,7 +75,8 @@ server = [
     "dep:tokio-util",
     "dep:reqwest",
     "dep:urlencoding",
-    "dep:rustrict"
+    "dep:rustrict",
+    "dep:pgvector"
 ]
 http = ["dep:http"]
 axum = ["dep:axum"]

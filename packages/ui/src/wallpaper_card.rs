@@ -1,12 +1,14 @@
+use api::Wallpaper;
 use dioxus::prelude::*;
 use lucide_dioxus::{Download, Heart};
-use api::Wallpaper;
 
 const CARD_CSS: Asset = asset!("/assets/styling/wallpaper_card.css");
 
 #[derive(Props, Clone, PartialEq)]
 pub struct WallpaperCardProps {
     pub wallpaper: Wallpaper,
+    #[props(default)]
+    pub on_remove: Option<EventHandler<()>>,
 }
 
 #[component]
@@ -16,7 +18,7 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
     let mut has_downloaded = use_signal(|| false);
 
     let is_liked = crate::FAVORITED_IDS.read().contains(&props.wallpaper.id);
-    
+
     let toggle_id = props.wallpaper.id.clone();
 
     rsx! {
@@ -29,11 +31,23 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                 class: "wallpaper-card glass glow-hover",
                 style: "position: relative; overflow: hidden; border-radius: 20px; background: var(--bg-secondary); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; aspect-ratio: 16 / 10;",
 
-                img {
-                    src: "{crate::resolve_asset_url(&props.wallpaper.thumbnail_url)}",
-                    alt: "{props.wallpaper.title}",
-                    loading: "lazy",
-                    style: "width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);"
+                if props.wallpaper.is_live {
+                    video {
+                        src: "{crate::resolve_asset_url(&props.wallpaper.image_url)}",
+                        poster: "{crate::resolve_asset_url(&props.wallpaper.thumbnail_url)}",
+                        autoplay: "true",
+                        loop: "true",
+                        muted: "true",
+                        playsinline: "true",
+                        style: "width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);"
+                    }
+                } else {
+                    img {
+                        src: "{crate::resolve_asset_url(&props.wallpaper.thumbnail_url)}",
+                        alt: "{props.wallpaper.title}",
+                        loading: "lazy",
+                        style: "width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);"
+                    }
                 }
 
                 div {
@@ -43,6 +57,19 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                     div {
                         class: "card-top-actions",
                         style: "display: flex; justify-content: flex-end; gap: 8px; width: 100%; z-index: 5; pointer-events: auto;",
+
+                        if let Some(on_remove) = props.on_remove.clone() {
+                            button {
+                                class: "action-btn remove-btn",
+                                style: "display: flex; align-items: center; justify-content: center; padding: 6px; backdrop-filter: blur(12px); border-radius: 10px; color: #ef4444; background: rgba(0,0,0,0.5); cursor: pointer; transition: all 0.2s; border: none; margin-right: auto;",
+                                onclick: move |e| {
+                                    e.stop_propagation();
+                                    on_remove.call(());
+                                },
+                                lucide_dioxus::Trash { size: 16, color: "currentColor" }
+                            }
+                        }
+
                         button {
                             class: "action-btn like-btn",
                             class: if is_liked { "liked" },
@@ -88,7 +115,7 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                         class: "card-info-bottom",
                         style: "display: flex; flex-direction: column;",
                         h3 { style: "font-size: 18px; font-weight: 800; color: white; margin-bottom: 2px; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.3);", "{props.wallpaper.title}" }
-                        p { 
+                        p {
                             style: "display: flex; align-items: center; gap: 4px; opacity: 0.9; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 600; pointer-events: auto; z-index: 5;",
                             lucide_dioxus::User { size: 12 }
                             a { href: "/user/{props.wallpaper.author.replace(\" \", \"-\")}", style: "color: inherit; text-decoration: none;", "{props.wallpaper.author}" }

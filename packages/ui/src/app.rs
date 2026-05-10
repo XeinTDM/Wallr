@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
-use crate::{DropdownSection, ExploreDropdown, Navbar};
 use crate::views::*;
+use crate::{DropdownSection, ExploreDropdown, Navbar};
+use dioxus::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AuthState {
@@ -41,6 +41,10 @@ pub enum Route {
         Login {},
         #[route("/register")]
         Register {},
+        #[route("/forgot-password")]
+        ForgotPassword {},
+        #[route("/reset-password/:token")]
+        ResetPassword { token: String },
         #[route("/settings")]
         Settings {},
         #[route("/collections")]
@@ -63,6 +67,8 @@ pub enum Route {
         Admin {},
         #[route("/admin/users")]
         AdminUsers {},
+        #[route("/admin/reports")]
+        AdminReports {},
 }
 
 #[component]

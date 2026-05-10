@@ -1,6 +1,6 @@
-use crate::{User, UserRecord};
 use super::cache::get_user_cache;
 use super::get_pool;
+use crate::{User, UserRecord};
 
 pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>> {
     let pool = get_pool()?;
@@ -18,7 +18,7 @@ pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>
             bio: r.bio,
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
-        is_banned: r.is_banned,
+            is_banned: r.is_banned,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -41,7 +41,7 @@ pub async fn get_user_by_name(name: &str) -> anyhow::Result<Option<UserRecord>> 
             bio: r.bio,
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
-        is_banned: r.is_banned,
+            is_banned: r.is_banned,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -69,7 +69,7 @@ pub async fn get_user_by_id(id: &str) -> anyhow::Result<Option<UserRecord>> {
             bio: r.bio,
             social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
             role: r.role,
-        is_banned: r.is_banned,
+            is_banned: r.is_banned,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -109,13 +109,21 @@ pub async fn update_user_media(
 ) -> anyhow::Result<()> {
     let pool = get_pool()?;
     if media_type == "pfp" {
-        sqlx::query!("UPDATE users SET pfp_url = $1 WHERE id = $2", file_url, user_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE users SET pfp_url = $1 WHERE id = $2",
+            file_url,
+            user_id
+        )
+        .execute(pool)
+        .await?;
     } else if media_type == "banner" {
-        sqlx::query!("UPDATE users SET banner_url = $1 WHERE id = $2", file_url, user_id)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "UPDATE users SET banner_url = $1 WHERE id = $2",
+            file_url,
+            user_id
+        )
+        .execute(pool)
+        .await?;
     }
 
     get_user_cache().remove(user_id).await;
@@ -125,30 +133,50 @@ pub async fn update_user_media(
 
 pub async fn revoke_all_sessions(user_id: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!("UPDATE users SET token_version = token_version + 1 WHERE id = $1", user_id)
-        .execute(pool)
-        .await?;
-        
+    sqlx::query!(
+        "UPDATE users SET token_version = token_version + 1 WHERE id = $1",
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
     get_user_cache().remove(user_id).await;
     Ok(())
 }
 
 pub async fn update_password(user_id: &str, new_password_hash: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!("UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2", new_password_hash, user_id)
-        .execute(pool)
-        .await?;
-        
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2",
+        new_password_hash,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
     get_user_cache().remove(user_id).await;
     Ok(())
 }
 
-pub async fn update_profile(user_id: &str, name: &str, email: &str, bio: Option<&str>, social_links: Option<&serde_json::Value>) -> anyhow::Result<()> {
+pub async fn update_profile(
+    user_id: &str,
+    name: &str,
+    email: &str,
+    bio: Option<&str>,
+    social_links: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!("UPDATE users SET name = $1, email = $2, bio = $3, social_links = $4 WHERE id = $5", name, email, bio, social_links, user_id)
-        .execute(pool)
-        .await?;
-        
+    sqlx::query!(
+        "UPDATE users SET name = $1, email = $2, bio = $3, social_links = $4 WHERE id = $5",
+        name,
+        email,
+        bio,
+        social_links,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
     get_user_cache().remove(user_id).await;
     Ok(())
 }
@@ -166,13 +194,18 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
     let uploads_json = serde_json::to_string_pretty(&uploads)?;
 
     let storage_path = super::files::get_storage_path();
-    
+
     let temp_dir = storage_path.join("tmp");
     if !tokio::fs::try_exists(&temp_dir).await.unwrap_or(false) {
         tokio::fs::create_dir_all(&temp_dir).await?;
     }
-    
-    let safe_username: String = user_record.user.name.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+
+    let safe_username: String = user_record
+        .user
+        .name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
     let temp_filename = format!("{}_export_{}.tar.gz", safe_username, uuid::Uuid::new_v4());
     let output_path = temp_dir.join(&temp_filename);
     let output_path_str = output_path.to_string_lossy().to_string();
@@ -208,7 +241,11 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
                 let filename = format!("{}_master.avif", wp.id);
                 let path = storage_path.join(&filename);
                 if let Ok(mut file) = std::fs::File::open(&path) {
-                    let safe_title: String = wp.title.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+                    let safe_title: String = wp
+                        .title
+                        .chars()
+                        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                        .collect();
                     let archive_path = format!("uploads/{}_{}.avif", safe_title, wp.id);
                     let _ = tar.append_file(archive_path, &mut file);
                 }
@@ -236,63 +273,65 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
 
             tar.finish()?;
         }
-        
+
         encoder.finish()?;
         Ok(())
-    }).await??;
+    })
+    .await??;
 
     Ok(output_path_str)
 }
 
 pub async fn delete_user(user_id: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    
+
     let mut tx = pool.begin().await?;
-    
+
     let user = sqlx::query!("SELECT name FROM users WHERE id = $1", user_id)
         .fetch_optional(&mut *tx)
         .await?;
-        
+
     if let Some(u) = user {
         // Find all wallpapers to clean up cache later
-        let wp_ids: Vec<String> = sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author = $1", u.name)
-            .fetch_all(&mut *tx)
-            .await?;
+        let wp_ids: Vec<String> =
+            sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author = $1", u.name)
+                .fetch_all(&mut *tx)
+                .await?;
 
         // Delete favorites
         sqlx::query!("DELETE FROM user_favorites WHERE user_id = $1", user_id)
             .execute(&mut *tx)
             .await?;
-            
+
         // Delete wallpapers uploaded by user
         sqlx::query!("DELETE FROM wallpapers WHERE author = $1", u.name)
             .execute(&mut *tx)
             .await?;
-            
+
         // Delete user record
         sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
             .execute(&mut *tx)
             .await?;
-            
+
         tx.commit().await?;
-        
+
         get_user_cache().remove(user_id).await;
-        
+
         let wp_cache = super::cache::get_wallpaper_cache();
         for id in wp_ids {
             wp_cache.remove(&id).await;
         }
         super::cache::get_wallpaper_list_cache().invalidate_all();
     }
-    
+
     Ok(())
 }
 
 pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> {
     let pool = get_pool()?;
-    
+
     let search_pattern = format!("%{}%", query.to_lowercase());
-    
+
     let rows = sqlx::query!(
         "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned FROM users WHERE LOWER(name) LIKE $1 LIMIT $2",
         search_pattern,
@@ -301,29 +340,54 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
     .fetch_all(pool)
     .await?;
 
-    let users = rows.into_iter().map(|r| User {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        pfp_url: r.pfp_url,
-        banner_url: r.banner_url,
-        bio: r.bio,
-        social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
-        role: r.role,
-        is_banned: r.is_banned,
-    }).collect();
+    let users = rows
+        .into_iter()
+        .map(|r| User {
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            pfp_url: r.pfp_url,
+            banner_url: r.banner_url,
+            bio: r.bio,
+            social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
+            role: r.role,
+            is_banned: r.is_banned,
+        })
+        .collect();
 
     Ok(users)
 }
 
 pub async fn follow_user_db(follower_id: &str, following_id: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!(
-        "INSERT INTO user_follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        follower_id, following_id
+
+    let exists = sqlx::query!(
+        "SELECT 1 as id FROM user_follows WHERE follower_id = $1 AND following_id = $2",
+        follower_id,
+        following_id
     )
-    .execute(pool)
+    .fetch_optional(pool)
     .await?;
+
+    if exists.is_none() {
+        sqlx::query!(
+            "INSERT INTO user_follows (follower_id, following_id) VALUES ($1, $2)",
+            follower_id,
+            following_id
+        )
+        .execute(pool)
+        .await?;
+
+        if let Ok(Some(follower)) = get_user_by_id(follower_id).await {
+            let _ = crate::storage::create_notification_db(
+                following_id,
+                "New Follower",
+                &format!("{} started following you.", follower.user.name),
+            )
+            .await;
+        }
+    }
+
     Ok(())
 }
 
@@ -331,18 +395,90 @@ pub async fn unfollow_user_db(follower_id: &str, following_id: &str) -> anyhow::
     let pool = get_pool()?;
     sqlx::query!(
         "DELETE FROM user_follows WHERE follower_id = $1 AND following_id = $2",
-        follower_id, following_id
+        follower_id,
+        following_id
     )
     .execute(pool)
     .await?;
     Ok(())
 }
 
+pub async fn get_followers_db(
+    user_id: &str,
+    limit: i64,
+    offset: i64,
+) -> anyhow::Result<Vec<UserRecord>> {
+    let pool = get_pool()?;
+    let rows = sqlx::query!(
+        "SELECT u.* FROM users u INNER JOIN user_follows f ON u.id = f.follower_id WHERE f.following_id = $1 ORDER BY f.created_at DESC LIMIT $2 OFFSET $3",
+        user_id, limit, offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let users = rows
+        .into_iter()
+        .map(|r| UserRecord {
+            user: crate::User {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                pfp_url: r.pfp_url,
+                banner_url: r.banner_url,
+                bio: r.bio,
+                social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
+                role: r.role,
+                is_banned: r.is_banned,
+            },
+            password_hash: r.password_hash,
+            token_version: r.token_version,
+        })
+        .collect();
+
+    Ok(users)
+}
+
+pub async fn get_following_db(
+    user_id: &str,
+    limit: i64,
+    offset: i64,
+) -> anyhow::Result<Vec<UserRecord>> {
+    let pool = get_pool()?;
+    let rows = sqlx::query!(
+        "SELECT u.* FROM users u INNER JOIN user_follows f ON u.id = f.following_id WHERE f.follower_id = $1 ORDER BY f.created_at DESC LIMIT $2 OFFSET $3",
+        user_id, limit, offset
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let users = rows
+        .into_iter()
+        .map(|r| UserRecord {
+            user: crate::User {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                pfp_url: r.pfp_url,
+                banner_url: r.banner_url,
+                bio: r.bio,
+                social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
+                role: r.role,
+                is_banned: r.is_banned,
+            },
+            password_hash: r.password_hash,
+            token_version: r.token_version,
+        })
+        .collect();
+
+    Ok(users)
+}
+
 pub async fn check_is_following_db(follower_id: &str, following_id: &str) -> anyhow::Result<bool> {
     let pool = get_pool()?;
     let row = sqlx::query!(
         "SELECT 1 as exists FROM user_follows WHERE follower_id = $1 AND following_id = $2",
-        follower_id, following_id
+        follower_id,
+        following_id
     )
     .fetch_optional(pool)
     .await?;
@@ -357,17 +493,17 @@ pub async fn get_follow_counts(user_id: &str) -> anyhow::Result<(u32, u32)> {
     )
     .fetch_one(pool)
     .await?;
-    
+
     let following_row = sqlx::query!(
         "SELECT COUNT(*) as count FROM user_follows WHERE follower_id = $1",
         user_id
     )
     .fetch_one(pool)
     .await?;
-    
+
     Ok((
         followers_row.count.unwrap_or(0) as u32,
-        following_row.count.unwrap_or(0) as u32
+        following_row.count.unwrap_or(0) as u32,
     ))
 }
 
@@ -405,16 +541,19 @@ pub async fn get_audit_logs_db(limit: u32) -> anyhow::Result<Vec<crate::AuditLog
         limit
     ).fetch_all(pool).await?;
 
-    let logs = rows.into_iter().map(|r| crate::AuditLog {
-        id: r.id,
-        admin_id: r.admin_id,
-        admin_name: r.admin_name,
-        action: r.action,
-        target_id: r.target_id,
-        target_type: r.target_type,
-        reason: r.reason,
-        created_at: r.created_at,
-    }).collect();
+    let logs = rows
+        .into_iter()
+        .map(|r| crate::AuditLog {
+            id: r.id,
+            admin_id: r.admin_id,
+            admin_name: r.admin_name,
+            action: r.action,
+            target_id: r.target_id,
+            target_type: r.target_type,
+            reason: r.reason,
+            created_at: r.created_at,
+        })
+        .collect();
 
     Ok(logs)
 }
@@ -426,26 +565,34 @@ pub async fn get_recent_users_db(limit: u32) -> anyhow::Result<Vec<crate::User>>
     let rows = sqlx::query!(
         "SELECT * FROM users ORDER BY created_at DESC LIMIT $1",
         limit
-    ).fetch_all(pool).await?;
+    )
+    .fetch_all(pool)
+    .await?;
 
-    let users = rows.into_iter().map(|r| crate::User {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        pfp_url: r.pfp_url,
-        banner_url: r.banner_url,
-        bio: r.bio,
-        social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
-        role: r.role,
-        is_banned: r.is_banned,
-    }).collect();
+    let users = rows
+        .into_iter()
+        .map(|r| crate::User {
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            pfp_url: r.pfp_url,
+            banner_url: r.banner_url,
+            bio: r.bio,
+            social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
+            role: r.role,
+            is_banned: r.is_banned,
+        })
+        .collect();
 
     Ok(users)
 }
 
-pub async fn admin_bulk_delete_users_db(hours_ago: u32, pattern: Option<&str>) -> anyhow::Result<u64> {
+pub async fn admin_bulk_delete_users_db(
+    hours_ago: u32,
+    pattern: Option<&str>,
+) -> anyhow::Result<u64> {
     let pool = get_pool()?;
-    
+
     let hours_interval = chrono::Duration::hours(hours_ago as i64);
     let cutoff = chrono::Utc::now() - hours_interval;
 
@@ -455,9 +602,13 @@ pub async fn admin_bulk_delete_users_db(hours_ago: u32, pattern: Option<&str>) -
                 .fetch_all(pool)
                 .await?
         } else {
-            sqlx::query_scalar!("SELECT id FROM users WHERE created_at >= $1 AND name ~ $2", cutoff, pat)
-                .fetch_all(pool)
-                .await?
+            sqlx::query_scalar!(
+                "SELECT id FROM users WHERE created_at >= $1 AND name ~ $2",
+                cutoff,
+                pat
+            )
+            .fetch_all(pool)
+            .await?
         }
     } else {
         sqlx::query_scalar!("SELECT id FROM users WHERE created_at >= $1", cutoff)
@@ -471,34 +622,103 @@ pub async fn admin_bulk_delete_users_db(hours_ago: u32, pattern: Option<&str>) -
             deleted_count += 1;
         }
     }
-    
+
     Ok(deleted_count)
 }
 
 pub async fn admin_ban_user_db(user_id: &str, banned: bool) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!("UPDATE users SET is_banned = $1 WHERE id = $2", banned, user_id)
-        .execute(pool)
-        .await?;
-        
+    sqlx::query!(
+        "UPDATE users SET is_banned = $1 WHERE id = $2",
+        banned,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
     get_user_cache().remove(user_id).await;
-    
+
     if !banned {
         let _ = crate::storage::create_notification_db(
-            user_id, 
-            "Account Restored", 
-            "Your account has been unbanned. Welcome back to Wallr!"
-        ).await;
+            user_id,
+            "Account Restored",
+            "Your account has been unbanned. Welcome back to Wallr!",
+        )
+        .await;
     }
-    
+
     Ok(())
 }
 
 pub async fn update_user_role_db(user_id: &str, new_role: &str) -> anyhow::Result<()> {
     let pool = get_pool()?;
-    sqlx::query!("UPDATE users SET role = $1 WHERE id = $2", new_role, user_id)
+    sqlx::query!(
+        "UPDATE users SET role = $1 WHERE id = $2",
+        new_role,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+    get_user_cache().remove(user_id).await;
+    Ok(())
+}
+
+pub async fn create_password_reset_token_db(user_id: &str) -> anyhow::Result<String> {
+    let pool = get_pool()?;
+    let token = uuid::Uuid::new_v4().to_string();
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
+
+    sqlx::query!(
+        "DELETE FROM password_reset_tokens WHERE user_id = $1",
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query!(
+        "INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)",
+        token,
+        user_id,
+        expires_at
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(token)
+}
+
+pub async fn consume_password_reset_token_db(
+    token: &str,
+    new_password_hash: &str,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    let now = chrono::Utc::now();
+
+    let token_record = sqlx::query!(
+        "SELECT user_id, expires_at FROM password_reset_tokens WHERE token = $1",
+        token
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let record = match token_record {
+        Some(r) => r,
+        None => return Err(anyhow::anyhow!("Invalid reset token")),
+    };
+
+    if record.expires_at < now {
+        sqlx::query!("DELETE FROM password_reset_tokens WHERE token = $1", token)
+            .execute(pool)
+            .await?;
+        return Err(anyhow::anyhow!("Reset token has expired"));
+    }
+
+    update_password(&record.user_id, new_password_hash).await?;
+    revoke_all_sessions(&record.user_id).await?;
+
+    sqlx::query!("DELETE FROM password_reset_tokens WHERE token = $1", token)
         .execute(pool)
         .await?;
-    get_user_cache().remove(user_id).await;
+
     Ok(())
 }

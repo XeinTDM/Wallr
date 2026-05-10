@@ -9,6 +9,7 @@ api = { workspace = true }
 tokio = { version = "1.52.2", features = ["time"] }
 lucide-dioxus = { version = "3.11.0", features = ["all-icons"] }
 base64 = "0.22.1"
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { version = "0.4.0", features = ["futures"] }
