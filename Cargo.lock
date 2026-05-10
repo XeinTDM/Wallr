@@ -9152,6 +9152,7 @@ dependencies = [
  "dioxus",
  "dioxus-fullstack",
  "dotenvy",
+ "fast_image_resize",
  "gloo-events 0.1.2",
  "gloo-net 0.7.0",
  "gloo-timers 0.4.0",

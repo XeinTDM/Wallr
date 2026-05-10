@@ -146,16 +146,86 @@ fn main() {
                     Err(e) => return Err(format!("Failed to decode source image: {}", e)),
                 };
 
-                if let Some(w) = width {
-                    if let Some(h) = height {
-                        img = img.resize_to_fill(w, h, image::imageops::FilterType::Lanczos3);
-                    } else if w < img.width() {
-                        img = img.resize(w, u32::MAX, image::imageops::FilterType::Lanczos3);
+                let perform_resize = width.is_some() || height.is_some();
+                if perform_resize {
+                    use fast_image_resize as fr;
+                    
+                    let src_image = fr::images::Image::from_vec_u8(
+                        img.width(),
+                        img.height(),
+                        img.to_rgba8().into_raw(),
+                        fr::PixelType::U8x4,
+                    ).map_err(|e| format!("FR Error: {:?}", e))?;
+
+                    let mut dst_width = img.width();
+                    let mut dst_height = img.height();
+                    let mut crop_left = 0.0;
+                    let mut crop_top = 0.0;
+                    let mut crop_width = img.width() as f64;
+                    let mut crop_height = img.height() as f64;
+
+                    if let Some(w) = width {
+                        if let Some(h) = height {
+                            dst_width = w;
+                            dst_height = h;
+
+                            let src_ratio = img.width() as f64 / img.height() as f64;
+                            let dst_ratio = w as f64 / h as f64;
+
+                            if src_ratio > dst_ratio {
+                                crop_height = img.height() as f64;
+                                crop_width = crop_height * dst_ratio;
+                                let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
+                                if crop_val == "left" {
+                                    crop_left = 0.0;
+                                } else if crop_val == "right" {
+                                    crop_left = img.width() as f64 - crop_width;
+                                } else {
+                                    crop_left = (img.width() as f64 - crop_width) / 2.0;
+                                }
+                            } else {
+                                crop_width = img.width() as f64;
+                                crop_height = crop_width / dst_ratio;
+                                let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
+                                if crop_val == "top" {
+                                    crop_top = 0.0;
+                                } else if crop_val == "bottom" {
+                                    crop_top = img.height() as f64 - crop_height;
+                                } else {
+                                    crop_top = (img.height() as f64 - crop_height) / 2.0;
+                                }
+                            }
+                        } else if w < img.width() {
+                            dst_width = w;
+                            let scale = w as f64 / img.width() as f64;
+                            dst_height = (img.height() as f64 * scale) as u32;
+                        }
+                    } else if let Some(h) = height {
+                        if h < img.height() {
+                            dst_height = h;
+                            let scale = h as f64 / img.height() as f64;
+                            dst_width = (img.width() as f64 * scale) as u32;
+                        }
                     }
-                } else if let Some(h) = height {
-                    if h < img.height() {
-                        img = img.resize(u32::MAX, h, image::imageops::FilterType::Lanczos3);
-                    }
+
+                    if dst_width == 0 { dst_width = 1; }
+                    if dst_height == 0 { dst_height = 1; }
+
+                    let mut dst_image = fr::images::Image::new(dst_width, dst_height, fr::PixelType::U8x4);
+                    let mut resizer = fr::Resizer::new();
+
+                    resizer.resize(
+                        &src_image,
+                        &mut dst_image,
+                        &fr::ResizeOptions::new()
+                            .resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3))
+                            .crop(crop_left, crop_top, crop_width, crop_height),
+                    ).map_err(|e| format!("FR Resize Error: {:?}", e))?;
+
+                    img = image::DynamicImage::ImageRgba8(
+                        image::RgbaImage::from_raw(dst_width, dst_height, dst_image.into_vec())
+                            .ok_or("Failed to create RgbaImage")?
+                    );
                 }
 
                 let mut out = std::io::Cursor::new(Vec::new());

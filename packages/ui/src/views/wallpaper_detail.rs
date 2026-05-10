@@ -151,10 +151,10 @@ pub fn WallpaperDetail(id: String) -> Element {
         }
     });
 
-    let wallpaper = use_resource(move || {
+    let wallpaper = use_server_future(move || {
         let current = current_id();
         async move { get_wallpaper_by_id(current).await }
-    });
+    })?;
 
     let _favorite_status = use_resource(move || {
         let current = current_id();
@@ -188,7 +188,21 @@ pub fn WallpaperDetail(id: String) -> Element {
                     let is_author = if let AuthState::Authenticated(u) = auth_state() { u.name == wp.author } else { false };
                     let is_admin = if let AuthState::Authenticated(u) = auth_state() { u.role == "admin" } else { false };
 
+                    let absolute_img_url = format!("https://wallr.app{}", crate::resolve_asset_url(&wp.thumbnail_url));
+                    let title_text = format!("{} by {} - Wallr", wp.title, wp.author);
+                    let desc_text = format!("View this high-quality wallpaper uploaded by {} on Wallr.", wp.author);
+
                     rsx! {
+                        document::Title { "{title_text}" }
+                        document::Meta { property: "og:title", content: "{title_text}" }
+                        document::Meta { property: "og:description", content: "{desc_text}" }
+                        document::Meta { property: "og:image", content: "{absolute_img_url}" }
+                        document::Meta { property: "og:type", content: "website" }
+                        document::Meta { name: "twitter:card", content: "summary_large_image" }
+                        document::Meta { name: "twitter:title", content: "{title_text}" }
+                        document::Meta { name: "twitter:description", content: "{desc_text}" }
+                        document::Meta { name: "twitter:image", content: "{absolute_img_url}" }
+
                         div {
                             class: "detail-grid",
                             style: "display: grid; grid-template-columns: 2fr 1fr; gap: 48px;",

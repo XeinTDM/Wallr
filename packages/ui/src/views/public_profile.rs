@@ -11,15 +11,15 @@ pub fn PublicProfile(username: String) -> Element {
         current_username.set(username.clone());
     }
 
-    let profile = use_resource(move || {
+    let profile = use_server_future(move || {
         let uname = current_username();
         async move { get_public_profile(uname).await }
-    });
+    })?;
 
-    let uploads = use_resource(move || {
+    let uploads = use_server_future(move || {
         let uname = current_username();
         async move { get_public_uploads(uname, 0, 100).await }
-    });
+    })?;
 
     let mut is_follows_modal_open = use_signal(|| false);
     let mut follows_modal_type = use_signal(|| String::from("followers"));
@@ -44,7 +44,21 @@ pub fn PublicProfile(username: String) -> Element {
                     };
                     let uploads_count = uploads().and_then(|res| res.ok()).map(|list| list.len() as u32);
 
+                    let title_text = format!("{}'s Profile - Wallr", user_data.name);
+                    let desc_text = format!("Check out wallpapers uploaded by {} on Wallr.", user_data.name);
+                    let absolute_pfp = format!("https://wallr.app{}", crate::resolve_asset_url(&user_data.pfp_url));
+
                     rsx! {
+                        document::Title { "{title_text}" }
+                        document::Meta { property: "og:title", content: "{title_text}" }
+                        document::Meta { property: "og:description", content: "{desc_text}" }
+                        document::Meta { property: "og:image", content: "{absolute_pfp}" }
+                        document::Meta { property: "og:type", content: "profile" }
+                        document::Meta { name: "twitter:card", content: "summary" }
+                        document::Meta { name: "twitter:title", content: "{title_text}" }
+                        document::Meta { name: "twitter:description", content: "{desc_text}" }
+                        document::Meta { name: "twitter:image", content: "{absolute_pfp}" }
+
                         ProfileHeader {
                             user: user_data.clone(),
                             is_owner,
