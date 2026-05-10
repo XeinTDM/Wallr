@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn Collections() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let collections = use_resource(move || async move { get_collections().await });
 
     rsx! {
@@ -18,14 +19,14 @@ pub fn Collections() -> Element {
                     h1 {
                         class: "text-gradient",
                         style: "font-size: 48px; font-weight: 900; margin-bottom: 12px;",
-                        "Your Collections"
+                        "{i18n.t(\"collections_title\")}"
                     }
-                    p { style: "color: var(--text-secondary);", "Curated groups of wallpapers for every mood." }
+                    p { style: "color: var(--text-secondary);", "{i18n.t(\"collections_desc\")}" }
                 }
                 button {
                     class: "btn-primary",
                     style: "padding: 12px 24px; border-radius: 12px;",
-                    "Create New Collection"
+                    "{i18n.t(\"collections_create_btn\")}"
                 }
             }
 
@@ -44,7 +45,7 @@ pub fn Collections() -> Element {
                             }
                         }
                     },
-                    Some(Err(e)) => rsx! { div { "Error: {e}" } },
+                    Some(Err(e)) => rsx! { div { "{i18n.t(\"error_prefix\")}: {e}" } },
                     None => rsx! { LoadingScreen {} }
                 }
             }
@@ -54,6 +55,7 @@ pub fn Collections() -> Element {
 
 #[component]
 fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Element {
+    let i18n = crate::i18n::use_i18n();
     rsx! {
         div {
             class: "glass collection-card glow-hover",
@@ -67,14 +69,14 @@ fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Elemen
                 }
                 div {
                     style: "position: absolute; bottom: 16px; right: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;",
-                    "{count} items"
+                    "{count} {i18n.t(\"collections_items\")}"
                 }
             }
 
             div {
                 style: "padding: 20px;",
                 h3 { style: "font-size: 20px; font-weight: 800; margin-bottom: 4px;", "{name}" }
-                span { style: "color: var(--text-muted); font-size: 14px;", "Shared Collection" }
+                span { style: "color: var(--text-muted); font-size: 14px;", "{i18n.t(\"collections_shared\")}" }
             }
         }
     }

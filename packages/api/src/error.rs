@@ -41,15 +41,15 @@ impl ApiError {
         match self {
             ApiError::Database(e) => {
                 eprintln!("Database error: {:?}", e);
-                dioxus::prelude::ServerFnError::new("Internal Server Error")
+                dioxus::prelude::ServerFnError::new("api_err_internal")
             }
             ApiError::Io(e) => {
                 eprintln!("IO error: {:?}", e);
-                dioxus::prelude::ServerFnError::new("Internal Server Error")
+                dioxus::prelude::ServerFnError::new("api_err_internal")
             }
             ApiError::Serialization(e) => {
                 eprintln!("Serialization error: {:?}", e);
-                dioxus::prelude::ServerFnError::new("Internal Server Error")
+                dioxus::prelude::ServerFnError::new("api_err_internal")
             }
             ApiError::Unexpected(e) => {
                 let err_str = e.to_string();
@@ -60,7 +60,7 @@ impl ApiError {
                     dioxus::prelude::ServerFnError::new(err_str)
                 } else {
                     eprintln!("Unexpected internal error: {:?}", e);
-                    dioxus::prelude::ServerFnError::new("Internal Server Error")
+                    dioxus::prelude::ServerFnError::new("api_err_internal")
                 }
             }
             ApiError::Auth(msg)

@@ -31,6 +31,7 @@ pub struct LocalTagger {
     tokenizer: Tokenizer,
     text_embeddings: Tensor,
     tags: Vec<String>,
+    nsfw_embeddings: Tensor,
     mean: Tensor,
     std: Tensor,
 }
@@ -85,6 +86,26 @@ impl LocalTagger {
 
         let normalized_text_features = text_features.broadcast_div(&text_norms)?;
 
+        let nsfw_prompts = vec![
+            "a photo of pornography, nsfw, explicit, nudity, inappropriate".to_string(),
+            "a safe, family friendly, appropriate photo".to_string(),
+        ];
+        let nsfw_tokens = tokenizer
+            .encode_batch(nsfw_prompts, true)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        let nsfw_token_ids: Vec<Vec<u32>> =
+            nsfw_tokens.iter().map(|t| t.get_ids().to_vec()).collect();
+        let max_len_nsfw = nsfw_token_ids.iter().map(|v| v.len()).max().unwrap_or(0);
+        let mut nsfw_padded = Vec::new();
+        for mut id_vec in nsfw_token_ids {
+            id_vec.resize(max_len_nsfw, 0);
+            nsfw_padded.push(id_vec);
+        }
+        let nsfw_text_tensor = Tensor::new(nsfw_padded, &device)?;
+        let nsfw_text_features = model.get_text_features(&nsfw_text_tensor)?;
+        let nsfw_text_norms = nsfw_text_features.sqr()?.sum_keepdim(1)?.sqrt()?;
+        let nsfw_normalized = nsfw_text_features.broadcast_div(&nsfw_text_norms)?;
+
         let mean =
             Tensor::new(&[0.48145466f32, 0.4578275, 0.40821073], &device)?.reshape((1, 3, 1, 1))?;
         let std = Tensor::new(&[0.26862954f32, 0.26130258, 0.27577711], &device)?
@@ -96,12 +117,13 @@ impl LocalTagger {
             tokenizer,
             text_embeddings: normalized_text_features,
             tags,
+            nsfw_embeddings: nsfw_normalized,
             mean,
             std,
         })
     }
 
-    pub fn tag_image(&self, img: &DynamicImage) -> anyhow::Result<(Vec<String>, Vec<f32>)> {
+    pub fn tag_image(&self, img: &DynamicImage) -> anyhow::Result<(Vec<String>, Vec<f32>, bool)> {
         let resized = img.resize_exact(224, 224, image::imageops::FilterType::Triangle);
         let pixels = resized.to_rgb8().into_raw();
 
@@ -118,6 +140,10 @@ impl LocalTagger {
 
         let img_norm = image_features.sqr()?.sum_keepdim(1)?.sqrt()?;
         let normalized_image_features = image_features.broadcast_div(&img_norm)?;
+
+        let nsfw_similarities = normalized_image_features.matmul(&self.nsfw_embeddings.t()?)?;
+        let nsfw_sim_vec: Vec<f32> = nsfw_similarities.squeeze(0)?.to_vec1()?;
+        let is_nsfw = nsfw_sim_vec[0] > nsfw_sim_vec[1] || nsfw_sim_vec[0] > 0.28;
 
         let similarities = normalized_image_features.matmul(&self.text_embeddings.t()?)?;
 
@@ -138,7 +164,7 @@ impl LocalTagger {
 
         let image_embedding_vec: Vec<f32> = normalized_image_features.squeeze(0)?.to_vec1()?;
 
-        Ok((matched_tags, image_embedding_vec))
+        Ok((matched_tags, image_embedding_vec, is_nsfw))
     }
 
     pub fn get_text_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {

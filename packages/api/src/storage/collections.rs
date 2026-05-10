@@ -213,6 +213,7 @@ pub async fn get_collection_wallpapers_db(
             is_private: row.is_private,
             is_live: false,
             embedding: None,
+            phash: None,
         });
     }
 

@@ -94,7 +94,7 @@ pub async fn check_comment_rate_limit(user_id: &str) -> anyhow::Result<()> {
     let cache = super::cache::get_comment_rate_limit_cache();
     let count = cache.get(user_id).await.unwrap_or(0);
     if count >= 5 {
-        anyhow::bail!("You are posting comments too quickly. Please wait a minute.");
+        anyhow::bail!("api_err_comment_rate_limit");
     }
     cache.insert(user_id.to_string(), count + 1).await;
     Ok(())
@@ -123,7 +123,7 @@ pub async fn delete_comment_db(
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(anyhow::anyhow!("Comment not found or permission denied"));
+        return Err(anyhow::anyhow!("api_err_comment_not_found_or_denied"));
     }
 
     Ok(())
@@ -145,7 +145,7 @@ pub async fn update_comment_db(
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(anyhow::anyhow!("Comment not found or permission denied"));
+        return Err(anyhow::anyhow!("api_err_comment_not_found_or_denied"));
     }
     Ok(())
 }

@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn Editorial() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "rating".to_string());
@@ -14,8 +15,8 @@ pub fn Editorial() -> Element {
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::Home {},
-            title: "Editorial Selections",
-            breadcrumb: "Editorial",
+            title: i18n.t("editorial_title"),
+            breadcrumb: i18n.t("editorial_breadcrumb"),
             category,
             resolution,
             sort,
@@ -25,8 +26,8 @@ pub fn Editorial() -> Element {
             timeframe,
             div {
                 style: "text-align: center; padding: 100px 0; color: var(--text-secondary);",
-                h2 { "Curated by our team" }
-                p { "This section is coming soon. Stay tuned for the best hand-picked wallpapers." }
+                h2 { "{i18n.t(\"editorial_curated\")}" }
+                p { "{i18n.t(\"editorial_coming_soon\")}" }
             }
         }
     }

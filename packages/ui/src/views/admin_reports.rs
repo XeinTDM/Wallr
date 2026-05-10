@@ -8,6 +8,7 @@ pub fn AdminReports() -> Element {
     let auth_state = use_context::<Signal<AuthState>>();
     let nav = use_navigator();
     let mut toaster = crate::toast::use_toaster();
+    let i18n = crate::i18n::use_i18n();
 
     let is_allowed = match auth_state() {
         AuthState::Authenticated(u) => {
@@ -37,9 +38,9 @@ pub fn AdminReports() -> Element {
         spawn(async move {
             if let Ok(_) = resolve_report(report_id, action).await {
                 reports_res.restart();
-                toaster.success("Report resolved");
+                toaster.success(i18n.t("success_report_resolved"));
             } else {
-                toaster.error("Failed to resolve report");
+                toaster.error(i18n.t("err_resolve_report"));
             }
         });
     };
@@ -55,7 +56,7 @@ pub fn AdminReports() -> Element {
                     to: Route::Admin {},
                     style: "color: var(--text-secondary); display: flex; align-items: center; gap: 8px; text-decoration: none;",
                     ArrowLeft { size: 20 }
-                    "Back to Admin"
+                    "{i18n.t(\"admin_back\")}"
                 }
             }
 
@@ -65,9 +66,9 @@ pub fn AdminReports() -> Element {
                     h1 {
                         style: "font-size: 32px; font-weight: 900; margin: 0 0 8px 0; display: flex; align-items: center; gap: 12px;",
                         ShieldAlert { size: 32, color: "#f59e0b" }
-                        "Moderation Reports"
+                        "{i18n.t(\"admin_moderation_reports\")}"
                     }
-                    p { style: "color: var(--text-secondary); margin: 0;", "Review and resolve user-reported content." }
+                    p { style: "color: var(--text-secondary); margin: 0;", "{i18n.t(\"admin_reports_desc\")}" }
                 }
 
                 div {
@@ -76,19 +77,19 @@ pub fn AdminReports() -> Element {
                         class: if status_filter() == "pending" { "tag active" } else { "tag" },
                         style: "padding: 8px 16px; border-radius: 8px; font-weight: 600;",
                         onclick: move |_| status_filter.set("pending".to_string()),
-                        "Pending"
+                        "{i18n.t(\"admin_pending\")}"
                     }
                     button {
                         class: if status_filter() == "dismissed" { "tag active" } else { "tag" },
                         style: "padding: 8px 16px; border-radius: 8px; font-weight: 600;",
                         onclick: move |_| status_filter.set("dismissed".to_string()),
-                        "Dismissed"
+                        "{i18n.t(\"admin_dismissed\")}"
                     }
                     button {
                         class: if status_filter() == "all" { "tag active" } else { "tag" },
                         style: "padding: 8px 16px; border-radius: 8px; font-weight: 600;",
                         onclick: move |_| status_filter.set("all".to_string()),
-                        "All"
+                        "{i18n.t(\"admin_all\")}"
                     }
                 }
             }
@@ -104,7 +105,7 @@ pub fn AdminReports() -> Element {
                                 div {
                                     style: "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; color: var(--text-muted); gap: 16px;",
                                     ShieldAlert { size: 48, color: "var(--text-muted)" }
-                                    p { "No reports found." }
+                                    p { "{i18n.t(\"admin_no_reports\")}" }
                                 }
                             }
                         } else {
@@ -126,7 +127,7 @@ pub fn AdminReports() -> Element {
                                             } else {
                                                 div {
                                                     style: "width: 120px; height: 80px; border-radius: 8px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 12px;",
-                                                    "Deleted"
+                                                    "{i18n.t(\"admin_deleted\")}"
                                                 }
                                             }
 
@@ -136,7 +137,7 @@ pub fn AdminReports() -> Element {
                                                     style: "display: flex; justify-content: space-between; margin-bottom: 8px;",
                                                     span {
                                                         style: "font-weight: 700; font-size: 16px;",
-                                                        "Reported by: "
+                                                        "{i18n.t(\"admin_reported_by\")}"
                                                         Link {
                                                             to: Route::PublicProfile { username: report.reporter_name.clone() },
                                                             style: "color: var(--accent-primary); text-decoration: none;",
@@ -177,7 +178,7 @@ pub fn AdminReports() -> Element {
                                                                     move |_| resolve_action(id.clone(), "dismiss".to_string())
                                                                 },
                                                                 Check { size: 16 }
-                                                                "Dismiss"
+                                                                "{i18n.t(\"admin_dismiss\")}"
                                                             }
                                                             button {
                                                                 style: "padding: 8px 16px; border-radius: 8px; border: none; background: rgba(239, 68, 68, 0.2); color: #f87171; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s;",
@@ -187,7 +188,7 @@ pub fn AdminReports() -> Element {
                                                                     move |_| resolve_action(id.clone(), "delete_wallpaper".to_string())
                                                                 },
                                                                 Trash2 { size: 16 }
-                                                                "Delete"
+                                                                "{i18n.t(\"admin_delete\")}"
                                                             }
                                                         }
                                                     }
@@ -203,7 +204,7 @@ pub fn AdminReports() -> Element {
                         rsx! {
                             div {
                                 style: "color: #ef4444; padding: 24px; background: rgba(239, 68, 68, 0.1); border-radius: 12px;",
-                                "Error loading reports: {e}"
+                                "{i18n.t(\"err_loading_reports\")}{e}"
                             }
                         }
                     },

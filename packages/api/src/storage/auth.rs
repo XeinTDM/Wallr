@@ -9,14 +9,14 @@ pub async fn check_login_rate_limit(ip: &str, email: &str) -> anyhow::Result<()>
     let ip_count = cache.get(&ip_key).await.unwrap_or(0);
 
     if ip_count >= 20 {
-        anyhow::bail!("Too many login attempts from this IP. Please try again in 15 minutes.");
+        anyhow::bail!("api_err_rate_limit_ip_login");
     }
 
     let email_key = format!("email:{}", email);
     let email_count = cache.get(&email_key).await.unwrap_or(0);
 
     if email_count >= 5 {
-        anyhow::bail!("Too many login attempts for this account. Please try again in 15 minutes.");
+        anyhow::bail!("api_err_rate_limit_acct_login");
     }
 
     cache.insert(ip_key, ip_count + 1).await;
@@ -29,7 +29,7 @@ pub async fn check_register_rate_limit(ip: &str) -> anyhow::Result<()> {
     let mut count = cache.get(ip).await.unwrap_or(0);
 
     if count >= 3 {
-        anyhow::bail!("Too many accounts created from this IP. Please try again later.");
+        anyhow::bail!("api_err_rate_limit_ip_accts");
     }
 
     count += 1;
@@ -101,7 +101,7 @@ pub async fn verify_token(token: &str) -> anyhow::Result<User> {
     let id = claims
         .get_claim("user_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("Missing user_id claim"))?;
+        .ok_or_else(|| anyhow::anyhow!("api_err_missing_claim"))?;
 
     let token_version = claims
         .get_claim("token_version")
@@ -110,15 +110,32 @@ pub async fn verify_token(token: &str) -> anyhow::Result<User> {
 
     let user_record = get_user_by_id(id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("User not found"))?;
+        .ok_or_else(|| anyhow::anyhow!("api_err_user_not_found"))?;
 
     if user_record.token_version != token_version {
-        anyhow::bail!("Token revoked");
+        anyhow::bail!("api_err_token_revoked");
     }
 
     if user_record.user.is_banned {
-        anyhow::bail!("Account is banned");
+        anyhow::bail!("api_err_account_banned");
     }
 
     Ok(user_record.user)
+}
+
+pub async fn link_oauth_account(
+    user_id: &str,
+    provider: &str,
+    provider_user_id: &str,
+) -> anyhow::Result<()> {
+    let pool = crate::storage::get_pool()?;
+    sqlx::query!(
+        "INSERT INTO user_oauth_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        user_id,
+        provider,
+        provider_user_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }

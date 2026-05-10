@@ -38,6 +38,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
     let mut user_menu_open = use_signal(|| false);
     let mut notif_menu_open = use_signal(|| false);
     let nav = use_navigator();
+    let i18n = crate::i18n::use_i18n();
 
     let has_user = props.user.is_some();
     let mut notifications_res = use_resource(move || async move {
@@ -159,7 +160,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                 r#type: "text",
                                 class: "glass search-input",
                                 style: "width: 100%; padding: 12px 20px 12px 48px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; outline: none;",
-                                placeholder: "Search for wallpapers...",
+                                placeholder: i18n.t("search_placeholder"),
                                 value: "{search_query}",
                                 oninput: move |e| search_query.set(e.value()),
                                 onkeydown: move |e| {
@@ -234,7 +235,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                 class: "glow-hover",
                                 to: upload_route,
                                 style: "padding: 8px 18px; border-radius: 20px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); font-weight: 600; text-decoration: none; font-size: 13px; transition: all 0.2s ease;",
-                                "Upload"
+                                "{i18n.t(\"upload\")}"
                             }
                         }
 
@@ -265,7 +266,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                     onclick: move |e| e.stop_propagation(),
                                     div {
                                         style: "display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.1);",
-                                        span { style: "font-weight: 700; color: white;", "Notifications" }
+                                        span { style: "font-weight: 700; color: white;", "{i18n.t(\"notifications\")}" }
                                         if let Some(notifs) = notifications_res.read().as_ref() {
                                             if notifs.iter().any(|n| !n.is_read) {
                                                 button {
@@ -276,7 +277,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                                             notifications_res.restart();
                                                         });
                                                     },
-                                                    "Mark all read"
+                                                    "{i18n.t(\"mark_all_read\")}"
                                                 }
                                             }
                                         }
@@ -285,7 +286,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                         if notifs.is_empty() {
                                             div {
                                                 style: "padding: 24px 0; text-align: center; color: var(--text-muted); font-size: 14px;",
-                                                "No notifications yet."
+                                                "{i18n.t(\"no_notifications\")}"
                                             }
                                         } else {
                                             for notif in notifs {
@@ -301,7 +302,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                             }
                                         }
                                     } else {
-                                        div { style: "padding: 20px; text-align: center; color: var(--text-muted);", "Loading..." }
+                                        div { style: "padding: 20px; text-align: center; color: var(--text-muted);", "{i18n.t(\"loading\")}" }
                                     }
                                 }
                             }
@@ -316,7 +317,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                 class: "user-info",
                                 style: "text-align: right; display: flex; flex-direction: column;",
                                 span { style: "font-size: 14px; font-weight: 700; color: white;", "{user.name}" }
-                                span { style: "font-size: 11px; color: var(--text-muted);", "Pro Member" }
+                                span { style: "font-size: 11px; color: var(--text-muted);", "{i18n.t(\"pro_member\")}" }
                             }
                             img {
                                 src: "{crate::resolve_asset_url(&user.pfp_url)}",
@@ -340,7 +341,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                             style: "padding: 10px 16px; border-radius: 10px; color: white; text-decoration: none; font-size: 14px; font-weight: 600; transition: background 0.2s; display: flex; align-items: center; gap: 10px;",
                                             class: "menu-item-hover",
                                             User { size: 16 }
-                                            "View Profile"
+                                            "{i18n.t(\"view_profile\")}"
                                         }
                                     }
 
@@ -351,7 +352,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                             style: "padding: 10px 16px; border-radius: 10px; color: white; text-decoration: none; font-size: 14px; font-weight: 600; transition: background 0.2s; display: flex; align-items: center; gap: 10px;",
                                             class: "menu-item-hover",
                                             Settings { size: 16 }
-                                            "Settings"
+                                            "{i18n.t(\"settings\")}"
                                         }
                                     }
 
@@ -367,7 +368,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                                             }
                                         },
                                         LogOut { size: 16 }
-                                        "Logout"
+                                        "{i18n.t(\"logout\")}"
                                     }
                                 }
                             }
@@ -386,6 +387,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
 #[component]
 pub fn ExploreDropdown(sections: Element) -> Element {
     let mut is_open = use_signal(|| false);
+    let i18n = crate::i18n::use_i18n();
     #[allow(unused_mut)]
     let mut menu_offset = use_signal(|| "-200px".to_string());
 
@@ -431,7 +433,7 @@ pub fn ExploreDropdown(sections: Element) -> Element {
                 class: "explore-trigger",
                 style: "color: var(--text-secondary); font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px;",
                 onclick: move |_| is_open.toggle(),
-                "Explore"
+                "{i18n.t(\"explore\")}"
                 ChevronDown { size: 16 }
             }
 

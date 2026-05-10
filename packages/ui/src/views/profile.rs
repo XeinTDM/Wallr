@@ -10,22 +10,11 @@ pub fn Profile() -> Element {
     let user = use_context::<Signal<crate::app::AuthState>>();
     let nav = use_navigator();
     let toaster = use_toaster();
+    let i18n = crate::i18n::use_i18n();
 
-    let mut loaded_uploads = use_signal(|| false);
     let mut is_create_collection_modal_open = use_signal(|| false);
     let mut is_follows_modal_open = use_signal(|| false);
     let mut follows_modal_type = use_signal(|| String::from("followers"));
-    let mut loaded_collections = use_signal(|| false);
-    let mut loaded_favorites = use_signal(|| true);
-    let mut loaded_analytics = use_signal(|| false);
-
-    use_effect(move || match active_tab().as_str() {
-        "uploads" => loaded_uploads.set(true),
-        "collections" => loaded_collections.set(true),
-        "favorites" => loaded_favorites.set(true),
-        "analytics" => loaded_analytics.set(true),
-        _ => {}
-    });
 
     let user_data = match user() {
         crate::app::AuthState::Loading => return rsx! { LoadingScreen {} },
@@ -36,57 +25,20 @@ pub fn Profile() -> Element {
         crate::app::AuthState::Authenticated(u) => u,
     };
 
-    let uploads = use_resource(move || {
-        let load = loaded_uploads();
-        async move {
-            if !load {
-                std::future::pending::<()>().await;
-            }
-            api::get_user_uploads(0, 100).await
-        }
-    });
-    let collections = use_resource(move || {
-        let load = loaded_collections();
-        async move {
-            if !load {
-                std::future::pending::<()>().await;
-            }
-            get_my_collections().await
-        }
-    });
-    let favorites = use_resource(move || {
-        let load = loaded_favorites();
-        async move {
-            if !load {
-                std::future::pending::<()>().await;
-            }
-            api::get_user_favorites(0, 100).await
-        }
-    });
-    let analytics = use_resource(move || {
-        let load = loaded_analytics();
-        async move {
-            if !load {
-                std::future::pending::<()>().await;
-            }
-            api::get_creator_analytics().await
-        }
-    });
+    let uploads = use_resource(move || async move { api::get_user_uploads(0, 100).await });
+    let collections = use_resource(move || async move { get_my_collections().await });
+    let favorites = use_resource(move || async move { api::get_user_favorites(0, 100).await });
+    let analytics = use_resource(move || async move { api::get_creator_analytics().await });
 
-    let uploads_count = match uploads() {
-        Some(Ok(list)) => list.len() as u32,
-        _ => 0,
-    };
-
-    let collections_count = match collections() {
-        Some(Ok(list)) => list.len() as u32,
-        _ => 0,
-    };
-
-    let favorites_count = match favorites() {
-        Some(Ok(list)) => list.len() as u32,
-        _ => 0,
-    };
+    let uploads_count = uploads()
+        .and_then(|res| res.ok())
+        .map(|list| list.len() as u32);
+    let collections_count = collections()
+        .and_then(|res| res.ok())
+        .map(|list| list.len() as u32);
+    let favorites_count = favorites()
+        .and_then(|res| res.ok())
+        .map(|list| list.len() as u32);
 
     let latest_upload_url = match uploads() {
         Some(Ok(list)) => list.first().map(|w| w.thumbnail_url.clone()),
@@ -99,6 +51,8 @@ pub fn Profile() -> Element {
             ".edit-overlay {{ position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: all 0.2s ease; backdrop-filter: blur(2px); }}"
             ".edit-overlay-container:hover .edit-overlay {{ opacity: 1; }}"
             ".pfp-overlay {{ border-radius: 50%; }}"
+            ".profile-tab {{ padding: 16px 0; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); transition: all 0.2s ease; }}"
+            ".profile-tab.active {{ border-bottom-color: var(--accent-primary); color: white; }}"
         }
         div {
             // Apply fade-in to the inner wrapper so modals at the root can escape the containing block
@@ -126,30 +80,10 @@ pub fn Profile() -> Element {
 
             div {
                 style: "display: flex; gap: 32px; margin-bottom: 48px; border-bottom: 1px solid rgba(255,255,255,0.1);",
-                ProfileTab {
-                    label: "Favorites",
-                    count: favorites_count,
-                    active: active_tab() == "favorites",
-                    onclick: move |_| active_tab.set("favorites".into())
-                }
-                ProfileTab {
-                    label: "Uploads",
-                    count: uploads_count,
-                    active: active_tab() == "uploads",
-                    onclick: move |_| active_tab.set("uploads".into())
-                }
-                ProfileTab {
-                    label: "Collections",
-                    count: collections_count,
-                    active: active_tab() == "collections",
-                    onclick: move |_| active_tab.set("collections".into())
-                }
-                ProfileTab {
-                    label: "Analytics",
-                    count: 0,
-                    active: active_tab() == "analytics",
-                    onclick: move |_| active_tab.set("analytics".into())
-                }
+                {render_profile_tab(&i18n.t("profile_tab_favorites"), favorites_count, active_tab() == "favorites", move |_| active_tab.set("favorites".into()))}
+                {render_profile_tab(&i18n.t("profile_tab_uploads"), uploads_count, active_tab() == "uploads", move |_| active_tab.set("uploads".into()))}
+                {render_profile_tab(&i18n.t("profile_tab_collections"), collections_count, active_tab() == "collections", move |_| active_tab.set("collections".into()))}
+                {render_profile_tab(&i18n.t("profile_tab_analytics"), None, active_tab() == "analytics", move |_| active_tab.set("analytics".into()))}
             }
 
             div {
@@ -193,21 +127,21 @@ pub fn Profile() -> Element {
                                         div {
                                             style: "grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 20px; text-align: center;",
                                             lucide_dioxus::Image { size: 48, color: "rgba(255,255,255,0.2)", class: "mb-4" }
-                                            h3 { style: "font-size: 20px; font-weight: 700; color: white; margin-bottom: 8px;", "Nothing to see here" }
-                                            p { style: "color: var(--text-muted); margin-bottom: 24px; max-width: 300px;", "You haven't added any wallpapers to this section yet." }
+                                            h3 { style: "font-size: 20px; font-weight: 700; color: white; margin-bottom: 8px;", "{i18n.t(\"profile_empty_title\")}" }
+                                            p { style: "color: var(--text-muted); margin-bottom: 24px; max-width: 300px;", "{i18n.t(\"profile_empty_desc\")}" }
                                             if current_tab == "uploads" {
                                                 Link {
                                                     to: Route::Upload {},
                                                     class: "glow-hover",
                                                     style: "padding: 10px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; color: white; font-weight: 600; text-decoration: none;",
-                                                    "Upload your first"
+                                                    "{i18n.t(\"profile_upload_first\")}"
                                                 }
                                             } else {
                                                 Link {
                                                     to: Route::Explore { tag: "all".to_string() },
                                                     class: "glow-hover",
                                                     style: "padding: 10px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; color: white; font-weight: 600; text-decoration: none;",
-                                                    "Discover wallpapers"
+                                                    "{i18n.t(\"profile_discover\")}"
                                                 }
                                             }
                                         }
@@ -246,8 +180,8 @@ pub fn Profile() -> Element {
                                     div {
                                         style: "grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center; background: rgba(255,255,255,0.02); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);",
                                         lucide_dioxus::FolderPlus { size: 48, color: "var(--text-muted)", style: "margin-bottom: 16px;" }
-                                        h3 { style: "font-size: 20px; font-weight: 700; margin-bottom: 8px;", "No Collections Yet" }
-                                        p { style: "color: var(--text-secondary); margin-bottom: 24px;", "Organize your favorite wallpapers into beautiful collections." }
+                                        h3 { style: "font-size: 20px; font-weight: 700; margin-bottom: 8px;", "{i18n.t(\"profile_no_collections\")}" }
+                                        p { style: "color: var(--text-secondary); margin-bottom: 24px;", "{i18n.t(\"profile_organize_collections\")}" }
                                         button {
                                             class: "glow-hover",
                                             style: "padding: 12px 24px; border-radius: 12px; background: var(--accent-primary); color: white; font-weight: 600; border: none; cursor: pointer;",
@@ -258,7 +192,7 @@ pub fn Profile() -> Element {
                                         }
                                     }
                                 },
-                                _ => rsx! { div { "Loading collections..." } }
+                                _ => rsx! { div { "{i18n.t(\"profile_loading_collections\")}" } }
                             }
                         }
                     },
@@ -273,21 +207,21 @@ pub fn Profile() -> Element {
                                             class: "glass glow-hover",
                                             style: "padding: 32px; border-radius: 24px; text-align: center;",
                                             lucide_dioxus::Image { size: 32, color: "var(--text-muted)", style: "margin-bottom: 16px; margin-inline: auto;" }
-                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "Total Uploads" }
+                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "{i18n.t(\"profile_total_uploads\")}" }
                                             p { style: "font-size: 48px; font-weight: 900; color: white;", "{stats.total_uploads}" }
                                         }
                                         div {
                                             class: "glass glow-hover",
                                             style: "padding: 32px; border-radius: 24px; text-align: center;",
                                             lucide_dioxus::Heart { size: 32, color: "#ef4444", style: "margin-bottom: 16px; margin-inline: auto;" }
-                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "Total Likes" }
+                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "{i18n.t(\"profile_total_likes\")}" }
                                             p { style: "font-size: 48px; font-weight: 900; color: white;", "{stats.total_likes}" }
                                         }
                                         div {
                                             class: "glass glow-hover",
                                             style: "padding: 32px; border-radius: 24px; text-align: center;",
                                             lucide_dioxus::Download { size: 32, color: "#10b981", style: "margin-bottom: 16px; margin-inline: auto;" }
-                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "Total Downloads" }
+                                            h4 { style: "font-size: 16px; color: var(--text-secondary); margin-bottom: 8px;", "{i18n.t(\"profile_total_downloads\")}" }
                                             p { style: "font-size: 48px; font-weight: 900; color: white;", "{stats.total_downloads}" }
                                         }
                                     }
@@ -295,7 +229,7 @@ pub fn Profile() -> Element {
                                 Some(Err(e)) => rsx! {
                                     div {
                                         style: "padding: 80px 20px; text-align: center; color: #ef4444;",
-                                        "Error loading analytics: {e}"
+                                        "{i18n.t(\"profile_err_analytics\")}{e}"
                                     }
                                 },
                                 None => rsx! {
@@ -307,7 +241,7 @@ pub fn Profile() -> Element {
                             }
                         }
                     },
-                    _ => rsx! { div { "Tab not found" } }
+                    _ => rsx! { div { "{i18n.t(\"profile_tab_not_found\")}" } }
                 }
             }
             }
@@ -320,10 +254,10 @@ pub fn Profile() -> Element {
                 let mut cols = collections;
                 spawn(async move {
                     if let Ok(_) = create_user_collection(name, None, false).await {
-                        toaster.success("Collection created!");
+                        toaster.success(i18n.t("success_collection_created"));
                         cols.restart();
                     } else {
-                        toaster.error("Failed to create collection");
+                        toaster.error(i18n.t("err_create_collection"));
                     }
                 });
             }
@@ -340,6 +274,7 @@ pub fn Profile() -> Element {
 
 #[component]
 fn CollectionCard(collection: UserCollection) -> Element {
+    let i18n = crate::i18n::use_i18n();
     rsx! {
         Link {
             to: Route::CollectionDetail { id: collection.id.clone() },
@@ -359,38 +294,29 @@ fn CollectionCard(collection: UserCollection) -> Element {
             div {
                 style: "position: absolute; bottom: 0; left: 0; right: 0; padding: 24px; background: linear-gradient(transparent, rgba(0,0,0,0.9));",
                 h4 { style: "font-size: 20px; font-weight: 800; color: white; margin-bottom: 4px;", "{collection.name}" }
-                p { style: "font-size: 14px; color: var(--text-muted);", "{collection.item_count} wallpapers" }
+                p { style: "font-size: 14px; color: var(--text-muted);", "{collection.item_count}{i18n.t(\"profile_wallpapers_count\")}" }
             }
         }
     }
 }
 
-#[component]
-fn ProfileTab(
-    label: String,
-    count: u32,
+pub fn render_profile_tab(
+    label: &str,
+    count: Option<u32>,
     active: bool,
-    onclick: EventHandler<MouseEvent>,
+    mut onclick: impl FnMut(Event<dioxus::html::MouseData>) + 'static,
 ) -> Element {
-    let border_color = if active {
-        "var(--accent-primary)"
-    } else {
-        "transparent"
-    };
-    let text_color = if active {
-        "white"
-    } else {
-        "var(--text-secondary)"
-    };
-
     rsx! {
         div {
-            style: "padding: 16px 0; font-weight: 700; cursor: pointer; border-bottom: 2px solid {border_color}; color: {text_color}; transition: all 0.2s ease;",
-            onclick: move |e| onclick.call(e),
+            key: "{label}",
+            class: if active { "profile-tab active" } else { "profile-tab" },
+            onclick: move |e| onclick(e),
             "{label} "
-            span {
-                style: "font-size: 14px; opacity: 0.6; margin-left: 4px;",
-                "{count}"
+            if let Some(c) = count {
+                span {
+                    style: "font-size: 14px; opacity: 0.6; margin-left: 4px;",
+                    "{c}"
+                }
             }
         }
     }
@@ -407,6 +333,7 @@ pub struct ProfileHeaderProps {
 
 #[component]
 pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let is_auth = use_context::<Signal<crate::app::AuthState>>();
 
     let uid_for_counts = props.user.id.clone();
@@ -417,9 +344,15 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
 
     let mut is_following = use_signal(|| false);
     let uid_for_following = props.user.id.clone();
+    let is_owner = props.is_owner;
     let is_following_res = use_resource(move || {
         let uid = uid_for_following.clone();
-        async move { api::check_is_following(uid).await }
+        async move {
+            if is_owner {
+                return Ok(false);
+            }
+            api::check_is_following(uid).await
+        }
     });
 
     let target_id_click = props.user.id.clone();
@@ -445,30 +378,33 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
     };
 
     rsx! {
-        if props.is_owner {
-            Link {
-                to: Route::Settings {},
-                class: "edit-overlay-container",
-                style: "display: block; width: 100%; height: 320px; background: {banner_bg} center/cover no-repeat; position: relative;",
-                div { style: "position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, var(--bg-primary)); z-index: 1;" }
-                div {
-                    class: "edit-overlay",
-                    style: "z-index: 2;",
-                    lucide_dioxus::Pen { size: 36, color: "white" }
-                }
-            }
-        } else {
-            div {
-                style: "display: block; width: 100%; height: 320px; background: {banner_bg} center/cover no-repeat; position: relative;",
-                div { style: "position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, var(--bg-primary)); z-index: 1;" }
-            }
-        }
-
         div {
             class: "container",
-            style: "margin-top: -80px; position: relative; z-index: 10;",
+            style: "padding-top: 24px;",
+
+            if props.is_owner {
+                Link {
+                    to: Route::Settings {},
+                    class: "edit-overlay-container",
+                    style: "display: block; width: 100%; height: 320px; border-radius: 24px; overflow: hidden; background: {banner_bg} center/cover no-repeat; position: relative; box-shadow: 0 10px 20px rgba(0,0,0,0.2);",
+                    div { style: "position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, var(--bg-primary)); z-index: 1;" }
+                    div {
+                        class: "edit-overlay",
+                        style: "z-index: 2;",
+                        lucide_dioxus::Pen { size: 36, color: "white" }
+                    }
+                }
+            } else {
+                div {
+                    style: "display: block; width: 100%; height: 320px; border-radius: 24px; overflow: hidden; background: {banner_bg} center/cover no-repeat; position: relative; box-shadow: 0 10px 20px rgba(0,0,0,0.2);",
+                    div { style: "position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, var(--bg-primary)); z-index: 1;" }
+                }
+            }
+
             div {
-                style: "display: flex; flex-direction: column; gap: 24px; margin-bottom: 48px;",
+                style: "margin-top: -80px; position: relative; z-index: 10; padding: 0 32px;",
+                div {
+                    style: "display: flex; flex-direction: column; gap: 24px; margin-bottom: 48px;",
 
                 div {
                     style: "display: flex; justify-content: space-between; align-items: flex-end;",
@@ -499,7 +435,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                                 to: Route::Settings {},
                                 class: "glass glow-hover",
                                 style: "padding: 10px 20px; border-radius: 12px; color: white; font-weight: 600; font-size: 14px; border: 1px solid rgba(255,255,255,0.1); text-decoration: none;",
-                                "Edit Profile"
+                                "{i18n.t(\"profile_edit_profile\")}"
                             }
                         }
                     } else {
@@ -513,15 +449,20 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                                         let target_id = target_id_click.clone();
                                         let current_following = is_following();
                                         is_following.toggle();
+                                        let mut refresh_counts = counts;
                                         spawn(async move {
                                             if current_following {
                                                 let _ = api::unfollow_user(target_id).await;
                                             } else {
                                                 let _ = api::follow_user(target_id).await;
                                             }
+                                            refresh_counts.restart();
                                         });
                                     },
-                                    if is_following() { "Following" } else { "Follow" }
+                                    {
+                                        let text = if is_following() { "{i18n.t(\"profile_following_btn\")}" } else { "{i18n.t(\"profile_follow_btn\")}" };
+                                        rsx! { "{text}" }
+                                    }
                                 }
                             }
                         }
@@ -539,7 +480,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                             style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
                             onclick: move |_| props.on_followers_click.call(()),
                             span { style: "font-weight: 600; color: white;", "{followers}" }
-                            span { "Followers" }
+                            span { "{i18n.t(\"profile_followers\")}" }
                         }
                         span { style: "opacity: 0.5;", "•" }
                         button {
@@ -547,7 +488,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                             style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
                             onclick: move |_| props.on_following_click.call(()),
                             span { style: "font-weight: 600; color: white;", "{following}" }
-                            span { "Following" }
+                            span { "{i18n.t(\"profile_following\")}" }
                         }
                     }
                     if let Some(bio) = &props.user.bio {
@@ -571,6 +512,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
             }
         }
     }
+    }
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -581,10 +523,12 @@ pub struct CreateCollectionModalProps {
 
 #[component]
 pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let mut is_open = props.is_open;
     let mut name = use_signal(|| String::new());
 
     use_effect(move || {
+        #[allow(unused_variables)]
         let current_is_open = is_open();
         #[cfg(target_arch = "wasm32")]
         if let Some(window) = web_sys::window() {
@@ -620,12 +564,12 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
 
                 h2 {
                     style: "font-size: 24px; font-weight: 800; margin: 0; color: white;",
-                    "New Collection"
+                    "{i18n.t(\"profile_modal_new_collection\")}"
                 }
 
                 input {
                     type: "text",
-                    placeholder: "Collection name...",
+                    placeholder: "{i18n.t(\"profile_modal_placeholder\")}",
                     value: "{name}",
                     autofocus: "true",
                     style: "width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 12px; color: white; font-size: 16px; outline: none;",

@@ -5,6 +5,7 @@ use lucide_dioxus::{ArrowLeft, Gavel, Trash2, Undo2, Users};
 
 #[component]
 pub fn AdminUsers() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let auth_state = use_context::<Signal<AuthState>>();
     let nav = use_navigator();
 
@@ -57,7 +58,7 @@ pub fn AdminUsers() -> Element {
                     h1 {
                         style: "font-size: 36px; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 16px;",
                         Users { size: 36, color: "var(--accent-primary)" }
-                        "User Management"
+                        "{i18n.t(\"admin_user_mgmt\")}"
                     }
                 }
                 div {
@@ -67,7 +68,7 @@ pub fn AdminUsers() -> Element {
                         div {
                             style: "width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; animation: pulse 2s infinite;"
                         }
-                        "Live Updates Active"
+                        "{i18n.t(\"admin_live_updates\")}"
                     }
                 }
             }
@@ -81,7 +82,7 @@ pub fn AdminUsers() -> Element {
                     h2 {
                         style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         Users { size: 24, color: "#60a5fa" }
-                        "Recent Users List"
+                        "{i18n.t(\"admin_recent_users_list\")}"
                     }
                     match users_res() {
                         Some(Ok(users)) => {
@@ -122,7 +123,7 @@ pub fn AdminUsers() -> Element {
                             }
                         },
                         Some(Err(e)) => rsx! { div { "Error: {e}" } },
-                        None => rsx! { div { "Loading..." } }
+                        None => rsx! { div { "{i18n.t(\"loading\")}" } }
                     }
                 }
 
@@ -133,11 +134,11 @@ pub fn AdminUsers() -> Element {
                     h2 {
                         style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         Trash2 { size: 24, color: "#ef4444" }
-                        "Advanced Moderation"
+                        "{i18n.t(\"admin_advanced_moderation\")}"
                     }
                     div {
                         style: "display: flex; flex-direction: column; gap: 16px;",
-                        p { style: "color: var(--text-secondary); font-size: 14px;", "Bulk delete users created within a certain time frame. This wipes their account, wallpapers, and comments permanently." }
+                        p { style: "color: var(--text-secondary); font-size: 14px;", "{i18n.t(\"admin_bulk_delete_desc\")}" }
 
                         div {
                             style: "display: flex; flex-direction: column; gap: 8px;",
@@ -182,7 +183,7 @@ pub fn AdminUsers() -> Element {
                                     Err(e) => status_msg.set(format!("Error: {}", e)),
                                 }
                             },
-                            "Bulk Delete Users"
+                            "{i18n.t(\"admin_bulk_delete\")}"
                         }
 
                         if !status_msg().is_empty() {
@@ -201,6 +202,7 @@ pub fn AdminUsers() -> Element {
 
 #[component]
 fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<String>) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let is_banned = user.is_banned;
 
     rsx! {
@@ -241,9 +243,9 @@ fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<Str
             td {
                 style: "padding: 12px;",
                 if is_banned {
-                    span { style: "font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.3);", "BANNED" }
+                    span { style: "font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.3);", "{i18n.t(\"admin_status_banned\")}" }
                 } else {
-                    span { style: "font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(52, 211, 153, 0.1); color: #6ee7b7; font-weight: 700; border: 1px solid rgba(52, 211, 153, 0.2);", "ACTIVE" }
+                    span { style: "font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(52, 211, 153, 0.1); color: #6ee7b7; font-weight: 700; border: 1px solid rgba(52, 211, 153, 0.2);", "{i18n.t(\"admin_status_active\")}" }
                 }
             }
             td {
@@ -258,10 +260,10 @@ fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<Str
                         },
                         if is_banned {
                             Undo2 { size: 14 }
-                            "Unban"
+                            "{i18n.t(\"admin_action_unban\")}"
                         } else {
                             Gavel { size: 14 }
-                            "Ban"
+                            "{i18n.t(\"admin_action_ban\")}"
                         }
                     }
                 }

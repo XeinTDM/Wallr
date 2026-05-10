@@ -18,6 +18,7 @@ pub struct Toast {
 #[component]
 pub fn ToastContainer() -> Element {
     let mut toasts = use_context::<Signal<Vec<Toast>>>();
+    let i18n = crate::i18n::use_i18n();
 
     rsx! {
         div {
@@ -57,7 +58,7 @@ pub fn ToastContainer() -> Element {
                             }
                             div {
                                 style: "flex: 1;",
-                                p { style: "font-weight: 700; font-size: 14px; margin: 0;", "{toast.message}" }
+                                p { style: "font-weight: 700; font-size: 14px; margin: 0;", "{i18n.t(&toast.message)}" }
                             }
                             button {
                                 style: "background: none; border: none; color: white; opacity: 0.5; cursor: pointer; display: flex; align_items: center; justify-content: center; padding: 4px; border-radius: 50%; transition: opacity 0.2s;",

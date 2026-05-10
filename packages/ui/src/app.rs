@@ -76,6 +76,7 @@ pub fn AppNavbar() -> Element {
     #[allow(unused_mut)]
     let mut show_search = use_context::<Signal<bool>>();
     let mut user = use_context::<Signal<AuthState>>();
+    let i18n = crate::i18n::use_i18n();
 
     let route = use_route::<Route>();
     let is_home = matches!(route, Route::Home {});
@@ -145,14 +146,14 @@ pub fn AppNavbar() -> Element {
                     Link {
                         to: Route::Login {},
                         style: "color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 600;",
-                        "Login"
+                        "{i18n.t(\"login\")}"
                     }
                 },
 
                 ExploreDropdown {
                     sections: rsx! {
                         DropdownSection {
-                            title: "Trending Categories",
+                            title: i18n.t("categories").to_string(),
                             div {
                                 class: "explore-categories-list",
                                 style: "display: grid; grid-template-columns: 1fr 1fr; gap: 8px;",
@@ -175,25 +176,25 @@ pub fn AppNavbar() -> Element {
                             }
                         }
                         DropdownSection {
-                            title: "Discover",
+                            title: i18n.t("discover").to_string(),
                             separator: true,
-                            Link { to: Route::Latest {}, "Latest wallpapers" }
-                            Link { to: Route::PopularSelection {}, "Popular wallpapers" }
-                            Link { to: Route::Editorial {}, "Editorial selections" }
+                            Link { to: Route::Latest {}, "{i18n.t(\"latest\")}" }
+                            Link { to: Route::PopularSelection {}, "{i18n.t(\"popular\")}" }
+                            Link { to: Route::Editorial {}, "Editorial" }
                             Link { to: Route::AiGenerated {}, "AI Generated" }
-                            Link { to: Route::LiveWallpapers {}, "Live wallpapers" }
+                            Link { to: Route::LiveWallpapers {}, "Live Wallpapers" }
                         }
                         DropdownSection {
-                            title: "Info",
+                            title: "Info".to_string(),
                             separator: true,
-                            Link { to: Route::About {}, "About" }
+                            Link { to: Route::About {}, "{i18n.t(\"about\")}" }
                             Link { to: Route::FAQ {}, "FAQ" }
                             Link { to: Route::ContactUs {}, "Contact us" }
-                            Link { to: Route::TermsOfService {}, "Terms & Conditions" }
-                            Link { to: Route::PrivacyPolicy {}, "Privacy Policy" }
+                            Link { to: Route::TermsOfService {}, "{i18n.t(\"terms\")}" }
+                            Link { to: Route::PrivacyPolicy {}, "{i18n.t(\"privacy\")}" }
                             if let AuthState::Authenticated(u) = user() {
                                 if u.role == "admin" || u.role == "super_admin" || u.role == "moderator" {
-                                    Link { to: Route::Admin {}, "Admin Dashboard" }
+                                    Link { to: Route::Admin {}, "{i18n.t(\"admin\")}" }
                                 }
                             }
                         }

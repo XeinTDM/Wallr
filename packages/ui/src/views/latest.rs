@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn Latest() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "date".to_string());
@@ -51,8 +52,8 @@ pub fn Latest() -> Element {
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::Home {},
-            title: "Latest wallpapers",
-            breadcrumb: "Latest",
+            title: i18n.t("latest_title"),
+            breadcrumb: i18n.t("latest_breadcrumb"),
             category,
             resolution,
             sort,

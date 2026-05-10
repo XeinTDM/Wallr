@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn PopularSelection() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "downloads".to_string());
@@ -15,8 +16,8 @@ pub fn PopularSelection() -> Element {
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::Home {},
-            title: "Popular wallpapers",
-            breadcrumb: "Popular",
+            title: i18n.t("popular_title"),
+            breadcrumb: i18n.t("popular_breadcrumb"),
             category,
             resolution,
             sort,
@@ -28,11 +29,11 @@ pub fn PopularSelection() -> Element {
                 class: "popular-sections",
                 style: "display: flex; flex-direction: column; gap: 60px; margin-top: 20px;",
 
-                PopularSection { title: "Daily Popular", period: "daily", category, resolution, sort, aspect_ratio, color, ai_filter }
-                PopularSection { title: "Weekly Popular", period: "weekly", category, resolution, sort, aspect_ratio, color, ai_filter }
-                PopularSection { title: "Monthly Popular", period: "monthly", category, resolution, sort, aspect_ratio, color, ai_filter }
-                PopularSection { title: "Yearly Popular", period: "yearly", category, resolution, sort, aspect_ratio, color, ai_filter }
-                PopularSection { title: "All Time Popular", period: "all-time", category, resolution, sort, aspect_ratio, color, ai_filter }
+                PopularSection { title: i18n.t("popular_daily").to_string(), period: "daily", category, resolution, sort, aspect_ratio, color, ai_filter }
+                PopularSection { title: i18n.t("popular_weekly").to_string(), period: "weekly", category, resolution, sort, aspect_ratio, color, ai_filter }
+                PopularSection { title: i18n.t("popular_monthly").to_string(), period: "monthly", category, resolution, sort, aspect_ratio, color, ai_filter }
+                PopularSection { title: i18n.t("popular_yearly").to_string(), period: "yearly", category, resolution, sort, aspect_ratio, color, ai_filter }
+                PopularSection { title: i18n.t("popular_all_time").to_string(), period: "all-time", category, resolution, sort, aspect_ratio, color, ai_filter }
             }
         }
     }
@@ -49,6 +50,7 @@ fn PopularSection(
     color: Signal<String>,
     ai_filter: Signal<String>,
 ) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let period_for_resource = period.clone();
     let wallpapers = use_resource(move || {
         let current_cat = category();
@@ -79,7 +81,7 @@ fn PopularSection(
                 Link {
                     to: crate::app::Route::PopularGrid { period },
                     style: "color: var(--accent-primary); font-weight: 600; text-decoration: none;",
-                    "View all →"
+                    "{i18n.t(\"popular_view_all\")}"
                 }
             }
 
@@ -116,6 +118,7 @@ fn PopularSection(
 
 #[component]
 pub fn PopularGrid(period: String) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "downloads".to_string());
@@ -123,6 +126,13 @@ pub fn PopularGrid(period: String) -> Element {
     let color = use_signal(String::new);
     let ai_filter = use_signal(String::new);
     let timeframe = use_signal(|| period.clone());
+    let title_key = match period.as_str() {
+        "daily" => "popular_daily",
+        "weekly" => "popular_weekly",
+        "monthly" => "popular_monthly",
+        "yearly" => "popular_yearly",
+        _ => "popular_all_time",
+    };
 
     let mut page = use_signal(|| 0_u32);
     let mut all_wallpapers = use_signal(Vec::new);
@@ -164,8 +174,8 @@ pub fn PopularGrid(period: String) -> Element {
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::PopularSelection {},
-            title: "{period} Popular",
-            breadcrumb: "Popular",
+            title: i18n.t(title_key),
+            breadcrumb: i18n.t("popular_breadcrumb"),
             category,
             resolution,
             sort,

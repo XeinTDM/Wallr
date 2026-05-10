@@ -37,6 +37,20 @@ fn main() {
                     .with_data_directory(
                         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".desktop_data"),
                     )
+                    .with_custom_index(
+                        r#"
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Wallr</title>
+                            </head>
+                            <body>
+                                <div id="main"></div>
+                            </body>
+                            </html>
+                        "#
+                        .into(),
+                    )
                     .with_window(
                         WindowBuilder::new()
                             .with_title("Wallr - Premium Wallpaper Engine")
@@ -82,6 +96,175 @@ fn App() -> Element {
     use_context_provider(|| Signal::new(false)); // show_search
     use_context_provider(|| Signal::new(Vec::<Toast>::new())); // toasts
     use_context_provider(|| Signal::new(AuthState::Loading)); // auth state
+    ui::init_i18n();
+    let i18n = ui::use_i18n();
+
+    #[cfg(feature = "desktop")]
+    {
+        use global_hotkey::{
+            GlobalHotKeyEvent, GlobalHotKeyManager,
+            hotkey::{Code, HotKey, Modifiers},
+        };
+        use muda::{Menu, MenuItem, PredefinedMenuItem};
+        use rand::seq::SliceRandom;
+        use tray_icon::{MouseButton, TrayIconBuilder, TrayIconEvent};
+
+        let mut _tray_icon = use_signal(|| None::<tray_icon::TrayIcon>);
+        let mut _menu_channel = use_signal(|| None::<muda::MenuEventReceiver>);
+        let mut _hotkey_manager = use_signal(|| None::<GlobalHotKeyManager>);
+
+        use_hook(move || {
+            let icon_bytes = include_bytes!("../assets/favicon.ico");
+            let icon_image = image::load_from_memory(icon_bytes)
+                .expect("Failed to load icon")
+                .into_rgba8();
+            let (width, height) = icon_image.dimensions();
+            let tray_icon_data =
+                tray_icon::Icon::from_rgba(icon_image.into_raw(), width, height).unwrap();
+
+            let tray_menu = Menu::new();
+            let open_i = MenuItem::new(i18n.t("sys_open_wallr"), true, None);
+            let quit_i = MenuItem::new(i18n.t("sys_quit"), true, None);
+
+            let _ = tray_menu.append(&open_i);
+            let _ = tray_menu.append(&PredefinedMenuItem::separator());
+            let _ = tray_menu.append(&quit_i);
+
+            let tray_icon = TrayIconBuilder::new()
+                .with_menu(Box::new(tray_menu))
+                .with_tooltip("Wallr")
+                .with_icon(tray_icon_data)
+                .build()
+                .unwrap();
+
+            let open_id = open_i.id().clone();
+            let quit_id = quit_i.id().clone();
+
+            _tray_icon.set(Some(tray_icon));
+            _menu_channel.set(Some(muda::MenuEvent::receiver().clone()));
+
+            let manager = GlobalHotKeyManager::new().unwrap();
+            let hotkey_w = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyW);
+            let hotkey_right = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowRight);
+            let hotkey_left = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowLeft);
+            let hotkey_s = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
+            let hotkey_h = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
+
+            let _ = manager.register(hotkey_w);
+            let _ = manager.register(hotkey_right);
+            let _ = manager.register(hotkey_left);
+            let _ = manager.register(hotkey_s);
+            let _ = manager.register(hotkey_h);
+
+            let id_w = hotkey_w.id();
+            let id_right = hotkey_right.id();
+            let id_left = hotkey_left.id();
+            let id_s = hotkey_s.id();
+            let id_h = hotkey_h.id();
+            
+            _hotkey_manager.set(Some(manager));
+
+            spawn(async move {
+                let menu_channel = muda::MenuEvent::receiver();
+                let tray_channel = TrayIconEvent::receiver();
+                let hotkey_channel = GlobalHotKeyEvent::receiver();
+
+                loop {
+                    if let Ok(event) = menu_channel.try_recv() {
+                        if event.id == open_id {
+                            let window = dioxus::desktop::window();
+                            window.set_minimized(false);
+                            window.set_visible(true);
+                            window.set_focus();
+                        } else if event.id == quit_id {
+                            std::process::exit(0);
+                        }
+                    }
+
+                    if let Ok(event) = tray_channel.try_recv() {
+                        if let tray_icon::TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            ..
+                        } = event
+                        {
+                            let window = dioxus::desktop::window();
+                            let is_minimized = window.is_minimized();
+                            let is_visible = window.is_visible();
+
+                            if is_minimized || !is_visible {
+                                window.set_minimized(false);
+                                window.set_visible(true);
+                                window.set_focus();
+                            } else {
+                                window.set_minimized(true);
+                                window.set_visible(false);
+                            }
+                        }
+                    }
+
+                    if let Ok(event) = hotkey_channel.try_recv() {
+                        if event.id == id_w || event.id == id_right || event.id == id_left {
+                            if let Ok(favs) = api::get_user_favorites(0, 100).await {
+                                if !favs.is_empty() {
+                                    let mut rng = rand::thread_rng();
+                                    if let Some(wp) = favs.choose(&mut rng) {
+                                        let image_url = wp.image_url.clone();
+                                        let wp_id = wp.id.clone();
+                                        let _ = tokio::task::spawn_blocking(move || {
+                                            let filename = image_url
+                                                .strip_prefix("/assets/uploads/")
+                                                .unwrap_or(&image_url);
+                                            let full_path = std::path::PathBuf::from(env!(
+                                                "CARGO_MANIFEST_DIR"
+                                            ))
+                                            .join("../ui/assets/uploads")
+                                            .join(filename);
+                                            if let Ok(img) = image::open(&full_path) {
+                                                let temp_dir = std::env::temp_dir();
+                                                let temp_path =
+                                                    temp_dir.join(format!("wallr_{}.jpg", wp_id));
+                                                if img.save(&temp_path).is_ok() {
+                                                    let _ = wallpaper::set_from_path(
+                                                        temp_path.to_str().unwrap(),
+                                                    );
+                                                }
+                                            }
+                                        })
+                                        .await;
+                                    }
+                                }
+                            }
+                        } else if event.id == id_h {
+                            let window = dioxus::desktop::window();
+                            let is_minimized = window.is_minimized();
+                            let is_visible = window.is_visible();
+
+                            if is_minimized || !is_visible {
+                                window.set_minimized(false);
+                                window.set_visible(true);
+                                window.set_focus();
+                            } else {
+                                window.set_minimized(true);
+                                window.set_visible(false);
+                            }
+                        } else if event.id == id_s {
+                            let _ = tokio::task::spawn_blocking(move || {
+                                if let Ok(path) = wallpaper::get() {
+                                    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| String::from("C:\\"));
+                                    let downloads = std::path::PathBuf::from(home).join("Downloads");
+                                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                    let dest = downloads.join(format!("wallr_saved_{}.jpg", ts));
+                                    let _ = std::fs::copy(path, dest);
+                                }
+                            }).await;
+                        }
+                    }
+
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            });
+        });
+    }
 
     #[cfg(feature = "desktop")]
     dioxus::desktop::use_asset_handler("upload", move |req, responder| {

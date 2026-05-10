@@ -41,5 +41,5 @@ pub async fn init_db(database_url: &str) -> Result<PgPool, sqlx::Error> {
 pub fn get_pool() -> anyhow::Result<&'static PgPool> {
     DB_POOL
         .get()
-        .ok_or_else(|| anyhow::anyhow!("Database not initialized. Please call init_db first."))
+        .ok_or_else(|| anyhow::anyhow!("api_err_db_uninit"))
 }

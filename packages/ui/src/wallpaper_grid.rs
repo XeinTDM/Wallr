@@ -10,15 +10,16 @@ pub fn WallpaperGrid(
     #[props(default)] empty_message: String,
     #[props(default)] empty_submessage: String,
 ) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let empty_msg = if empty_message.is_empty() {
-        "No wallpapers found."
+        i18n.t("grid_empty_message").to_string()
     } else {
-        &empty_message
+        empty_message.clone()
     };
     let empty_sub = if empty_submessage.is_empty() {
-        "Check back later or upload your own!"
+        i18n.t("grid_empty_submessage").to_string()
     } else {
-        &empty_submessage
+        empty_submessage.clone()
     };
 
     let on_end = on_end_reached;

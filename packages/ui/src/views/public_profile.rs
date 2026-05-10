@@ -1,5 +1,5 @@
 use crate::views::FollowsModal;
-use crate::views::profile::ProfileHeader;
+use crate::views::profile::{ProfileHeader, render_profile_tab};
 use crate::{LoadingScreen, WallpaperCard};
 use api::{get_public_profile, get_public_uploads};
 use dioxus::prelude::*;
@@ -42,10 +42,7 @@ pub fn PublicProfile(username: String) -> Element {
                         Some(Ok(list)) => list.first().map(|w| w.thumbnail_url.clone()),
                         _ => None,
                     };
-                    let uploads_count = match uploads() {
-                        Some(Ok(list)) => list.len() as u32,
-                        _ => 0,
-                    };
+                    let uploads_count = uploads().and_then(|res| res.ok()).map(|list| list.len() as u32);
 
                     rsx! {
                         ProfileHeader {
@@ -68,14 +65,7 @@ pub fn PublicProfile(username: String) -> Element {
 
                             div {
                                 style: "display: flex; gap: 32px; margin-bottom: 48px; border-bottom: 1px solid rgba(255,255,255,0.1);",
-                                div {
-                                    style: "padding: 16px 0; font-weight: 700; border-bottom: 2px solid var(--accent-primary); color: white; transition: all 0.2s ease;",
-                                    "Uploads "
-                                    span {
-                                        style: "font-size: 14px; opacity: 0.6; margin-left: 4px;",
-                                        "{uploads_count}"
-                                    }
-                                }
+                                {render_profile_tab("Uploads", uploads_count, true, move |_| {})}
                             }
 
                             div {

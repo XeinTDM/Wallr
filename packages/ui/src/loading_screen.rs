@@ -5,6 +5,7 @@ const LOADING_CSS: Asset = asset!("/assets/styling/loading.css");
 
 #[component]
 pub fn LoadingScreen() -> Element {
+    let i18n = crate::i18n::use_i18n();
     rsx! {
         document::Stylesheet { href: LOADING_CSS }
         div {
@@ -21,7 +22,7 @@ pub fn LoadingScreen() -> Element {
                 div {
                     class: "loading-text",
                     style: "font-size: 16px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center;",
-                    "Loading"
+                    "{i18n.t(\"loading_text\")}"
                     span { class: "dots" }
                 }
             }

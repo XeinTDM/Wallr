@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn AiGenerated() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "rating".to_string());
@@ -51,8 +52,8 @@ pub fn AiGenerated() -> Element {
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::Home {},
-            title: "AI Generated wallpapers",
-            breadcrumb: "AI Generated",
+            title: i18n.t("ai_title"),
+            breadcrumb: i18n.t("ai_breadcrumb"),
             category,
             resolution,
             sort,

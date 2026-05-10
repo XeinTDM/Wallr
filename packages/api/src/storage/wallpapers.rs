@@ -6,11 +6,12 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
     let pool = get_pool()?;
 
     let embed = wallpaper.embedding.clone().map(pgvector::Vector::from);
+    let phash_ref = wallpaper.phash.as_deref();
 
     sqlx::query!(
         r#"
-        INSERT INTO wallpapers (id, title, author, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        INSERT INTO wallpapers (id, title, author, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding, phash)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO UPDATE SET
             title = EXCLUDED.title,
             author = EXCLUDED.author,
@@ -25,7 +26,8 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
             downloads = EXCLUDED.downloads,
             is_private = EXCLUDED.is_private,
             is_live = EXCLUDED.is_live,
-            embedding = EXCLUDED.embedding
+            embedding = EXCLUDED.embedding,
+            phash = EXCLUDED.phash
         "#,
         wallpaper.id,
         wallpaper.title,
@@ -42,7 +44,8 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
         wallpaper.created_at,
         wallpaper.is_private,
         wallpaper.is_live,
-        embed as _
+        embed as _,
+        phash_ref
     )
     .execute(pool)
     .await?;
@@ -64,6 +67,7 @@ fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
     let is_private: bool = row.get("is_private");
     let is_live: bool = row.try_get("is_live").unwrap_or(false);
+    let phash: Option<Vec<u8>> = row.try_get("phash").unwrap_or(None);
 
     Wallpaper {
         id: row.get("id"),
@@ -81,6 +85,7 @@ fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
         is_private,
         is_live,
         embedding: None,
+        phash,
     }
 }
 
@@ -218,6 +223,7 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
         is_private: r.is_private,
         is_live: r.is_live,
         embedding: None,
+        phash: None, // We don't need to load phash into memory for general queries unless necessary
     });
     cache.insert(id.to_string(), result.clone()).await;
     Ok(result)
@@ -339,6 +345,7 @@ pub async fn get_user_favorites(
             is_private: r.is_private,
             is_live: r.is_live,
             embedding: None,
+            phash: None,
         })
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -406,6 +413,7 @@ pub async fn get_user_uploads(
             is_private: r.is_private,
             is_live: r.is_live,
             embedding: None,
+            phash: None,
         })
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -574,6 +582,7 @@ pub async fn get_user_download_history_db(
             is_private: r.is_private,
             is_live: r.is_live,
             embedding: None,
+            phash: None,
         })
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -770,6 +779,7 @@ pub async fn get_public_uploads(
             is_private: r.is_private,
             is_live: r.is_live,
             embedding: None,
+            phash: None,
         })
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -1008,8 +1018,43 @@ pub async fn get_similar_wallpapers_db(
     };
 
     if let Some(embed) = embedding {
-        let limit = limit as i64;
-        let rows = sqlx::query!(
+        let limit_i64 = limit as i64;
+
+        let collab_rows = sqlx::query!(
+            r#"
+            WITH recent_favs AS (
+                SELECT user_id FROM user_favorites WHERE wallpaper_id = $1 LIMIT 100
+            ),
+            collab AS (
+                SELECT f2.wallpaper_id, COUNT(*) as collab_score
+                FROM recent_favs f1
+                JOIN user_favorites f2 ON f1.user_id = f2.user_id
+                WHERE f2.wallpaper_id != $1
+                GROUP BY f2.wallpaper_id
+            ),
+            recent_downs AS (
+                SELECT user_id FROM user_downloads WHERE wallpaper_id = $1 ORDER BY downloaded_at DESC LIMIT 100
+            ),
+            collab_down AS (
+                SELECT d2.wallpaper_id, COUNT(*) as collab_score
+                FROM recent_downs d1
+                JOIN user_downloads d2 ON d1.user_id = d2.user_id
+                WHERE d2.wallpaper_id != $1
+                GROUP BY d2.wallpaper_id
+            )
+            SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live,
+                   (COALESCE(c.collab_score, 0) * 2 + COALESCE(d.collab_score, 0)) as "total_score!"
+            FROM wallpapers w
+            LEFT JOIN collab c ON w.id = c.wallpaper_id
+            LEFT JOIN collab_down d ON w.id = d.wallpaper_id
+            WHERE w.id != $1 AND w.is_private = false AND (c.collab_score > 0 OR d.collab_score > 0)
+            ORDER BY (COALESCE(c.collab_score, 0) * 2 + COALESCE(d.collab_score, 0)) DESC
+            LIMIT 50
+            "#,
+            id
+        ).fetch_all(pool).await.unwrap_or_default();
+
+        let visual_rows = sqlx::query!(
             r#"
             SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live 
             FROM wallpapers 
@@ -1019,33 +1064,105 @@ pub async fn get_similar_wallpapers_db(
             "#,
             id,
             embed as _,
-            limit
-        )
-        .fetch_all(pool)
-        .await?;
+            limit_i64
+        ).fetch_all(pool).await.unwrap_or_default();
 
-        let results: Vec<Wallpaper> = rows
-            .into_iter()
-            .map(|r| Wallpaper {
-                id: r.id,
-                title: r.title,
-                author: r.author,
-                image_url: r.image_url,
-                thumbnail_url: r.thumbnail_url,
-                tags: r.tags.0,
-                primary_colors: r.primary_colors.0,
-                dimensions: (r.width as u32, r.height as u32),
-                size_bytes: r.size_bytes as u64,
-                likes: r.likes.unwrap_or(0) as u32,
-                downloads: r.downloads.unwrap_or(0) as u32,
-                created_at: r.created_at,
-                is_private: r.is_private,
-                is_live: r.is_live,
-                embedding: None,
-            })
-            .collect();
+        let mut results = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for r in collab_rows {
+            if !seen.contains(&r.id) {
+                seen.insert(r.id.clone());
+                results.push(Wallpaper {
+                    id: r.id,
+                    title: r.title,
+                    author: r.author,
+                    image_url: r.image_url,
+                    thumbnail_url: r.thumbnail_url,
+                    tags: r.tags.0,
+                    primary_colors: r.primary_colors.0,
+                    dimensions: (r.width as u32, r.height as u32),
+                    size_bytes: r.size_bytes as u64,
+                    likes: r.likes.unwrap_or(0) as u32,
+                    downloads: r.downloads.unwrap_or(0) as u32,
+                    created_at: r.created_at,
+                    is_private: r.is_private,
+                    is_live: r.is_live,
+                    embedding: None,
+                    phash: None,
+                });
+            }
+        }
+
+        for r in visual_rows {
+            if !seen.contains(&r.id) {
+                seen.insert(r.id.clone());
+                results.push(Wallpaper {
+                    id: r.id,
+                    title: r.title,
+                    author: r.author,
+                    image_url: r.image_url,
+                    thumbnail_url: r.thumbnail_url,
+                    tags: r.tags.0,
+                    primary_colors: r.primary_colors.0,
+                    dimensions: (r.width as u32, r.height as u32),
+                    size_bytes: r.size_bytes as u64,
+                    likes: r.likes.unwrap_or(0) as u32,
+                    downloads: r.downloads.unwrap_or(0) as u32,
+                    created_at: r.created_at,
+                    is_private: r.is_private,
+                    is_live: r.is_live,
+                    embedding: None,
+                    phash: None,
+                });
+            }
+        }
+
+        results.truncate(limit as usize);
         return Ok(std::sync::Arc::new(results));
     }
 
     Ok(std::sync::Arc::new(vec![]))
+}
+
+pub async fn check_banned_phash(phash: &[u8]) -> anyhow::Result<bool> {
+    let pool = get_pool()?;
+
+    // Fetch all banned hashes
+    // In a massive system, you'd use pg_similarity or pgvector to do KNN search.
+    // For now, we fetch them and compute hamming distance in Rust.
+    let rows = sqlx::query!("SELECT phash FROM banned_hashes")
+        .fetch_all(pool)
+        .await?;
+
+    for row in rows {
+        let banned: Vec<u8> = row.phash;
+        // Compute hamming distance
+        let mut distance = 0;
+        for (a, b) in phash.iter().zip(banned.iter()) {
+            distance += (a ^ b).count_ones();
+        }
+
+        // A distance of <= 5 on a standard gradient hash implies it's essentially the same image
+        if distance <= 5 {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+pub async fn add_banned_hash(phash: &[u8], admin_id: &str, reason: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query!(
+        "INSERT INTO banned_hashes (id, phash, reason, added_by) VALUES ($1, $2, $3, $4)",
+        id,
+        phash,
+        reason,
+        admin_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }

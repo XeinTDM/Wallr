@@ -1,10 +1,11 @@
 use crate::app::Route;
 use crate::{LoadingScreen, WallpaperCard};
-use api::{get_collection_wallpapers, get_user_uploads, add_wallpaper_to_collection};
+use api::{add_wallpaper_to_collection, get_collection_wallpapers, get_user_uploads};
 use dioxus::prelude::*;
 
 #[component]
 pub fn CollectionDetail(id: String) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let mut page = use_signal(|| 0_u32);
     let mut current_id = use_signal(|| id.clone());
     let mut is_add_modal_open = use_signal(|| false);
@@ -36,16 +37,16 @@ pub fn CollectionDetail(id: String) -> Element {
                     Link {
                         to: Route::Profile {},
                         style: "color: var(--text-muted); text-decoration: none; display: inline-block; margin-bottom: 16px; font-weight: 600;",
-                        "← Back to Profile"
+                        "{i18n.t(\"col_detail_back\")}"
                     }
                     div {
                         style: "display: flex; justify-content: space-between; align-items: center;",
-                        h1 { style: "font-size: 32px; font-weight: 900; margin: 0;", "Collection Wallpapers" }
+                        h1 { style: "font-size: 32px; font-weight: 900; margin: 0;", "{i18n.t(\"col_detail_title\")}" }
                         button {
                             class: "glow-hover",
                             style: "padding: 10px 24px; background: var(--accent-primary); border-radius: 12px; color: white; font-weight: 600; border: none; cursor: pointer;",
                             onclick: move |_| is_add_modal_open.set(true),
-                            "Add from Uploads"
+                            "{i18n.t(\"col_detail_add_btn\")}"
                         }
                     }
                 }
@@ -57,13 +58,13 @@ pub fn CollectionDetail(id: String) -> Element {
                                 div {
                                     style: "display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center;",
                                     lucide_dioxus::Image { size: 48, color: "rgba(255,255,255,0.2)", class: "mb-4" }
-                                    h3 { style: "font-size: 20px; font-weight: 700; margin-bottom: 8px;", "Collection is empty" }
-                                    p { style: "color: var(--text-muted); margin-bottom: 24px;", "Add wallpapers from the explore page or from your own uploads." }
+                                    h3 { style: "font-size: 20px; font-weight: 700; margin-bottom: 8px;", "{i18n.t(\"col_detail_empty_title\")}" }
+                                    p { style: "color: var(--text-muted); margin-bottom: 24px;", "{i18n.t(\"col_detail_empty_desc\")}" }
                                     Link {
                                         to: Route::Explore { tag: "all".to_string() },
                                         class: "glow-hover",
                                         style: "padding: 10px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; color: white; font-weight: 600; text-decoration: none;",
-                                        "Discover wallpapers"
+                                        "{i18n.t(\"col_detail_discover\")}"
                                     }
                                 }
                             }
@@ -94,7 +95,7 @@ pub fn CollectionDetail(id: String) -> Element {
                             }
                         }
                     },
-                    Some(Err(e)) => rsx! { div { class: "error", "Error loading collection: {e}" } },
+                    Some(Err(e)) => rsx! { div { class: "error", "{i18n.t(\"col_detail_error\")}{e}" } },
                     None => rsx! { LoadingScreen {} }
                 }
             }
@@ -117,6 +118,7 @@ fn AddFromUploadsModal(
     existing_ids: Vec<String>,
     on_added: EventHandler<()>,
 ) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let mut just_added = use_signal(|| std::collections::HashSet::<String>::new());
 
     use_effect(move || {
@@ -136,6 +138,7 @@ fn AddFromUploadsModal(
     });
 
     use_effect(move || {
+        #[allow(unused_variables)]
         let current_is_open = is_open();
         #[cfg(target_arch = "wasm32")]
         if let Some(window) = web_sys::window() {
@@ -173,7 +176,7 @@ fn AddFromUploadsModal(
                     style: "display: flex; justify-content: space-between; align-items: center;",
                     h2 {
                         style: "font-size: 24px; font-weight: 800; margin: 0; color: white;",
-                        "Add from your uploads"
+                        "{i18n.t(\"col_detail_modal_title\")}"
                     }
                     button {
                         style: "background: none; border: none; cursor: pointer; padding: 8px;",
@@ -194,7 +197,7 @@ fn AddFromUploadsModal(
                                 rsx! {
                                     div {
                                         style: "text-align: center; padding: 40px; color: var(--text-muted);",
-                                        "You don't have any uploads left to add."
+                                        "{i18n.t(\"col_detail_modal_empty\")}"
                                     }
                                 }
                             } else {
@@ -209,12 +212,12 @@ fn AddFromUploadsModal(
                                                 onclick: {
                                                     let w_id = wp.id.clone();
                                                     let c_id = collection_id.clone();
-                                                    let mut on_added = on_added.clone();
+                                                    let on_added = on_added.clone();
                                                     let mut just_added_sig = just_added;
                                                     move |_| {
                                                         let w_id = w_id.clone();
                                                         let c_id = c_id.clone();
-                                                        let mut on_added = on_added.clone();
+                                                        let on_added = on_added.clone();
                                                         just_added_sig.write().insert(w_id.clone());
                                                         spawn(async move {
                                                             if let Ok(_) = add_wallpaper_to_collection(c_id, w_id).await {

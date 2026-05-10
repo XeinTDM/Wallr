@@ -13,7 +13,7 @@ pub struct FollowsModalProps {
 
 #[component]
 pub fn FollowsModal(props: FollowsModalProps) -> Element {
-    let mut page = use_signal(|| 0u32);
+    let page = use_signal(|| 0u32);
     let mut is_open = props.is_open;
 
     let username = props.username.clone();
@@ -33,6 +33,7 @@ pub fn FollowsModal(props: FollowsModalProps) -> Element {
     });
 
     use_effect(move || {
+        #[allow(unused_variables)]
         let current_is_open = is_open();
         #[cfg(target_arch = "wasm32")]
         if let Some(window) = web_sys::window() {

@@ -31,6 +31,32 @@
   --shadow-premium: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
 }
 
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.75);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  --accent-primary: #2563eb;
+  --accent-secondary: #3b82f6;
+  --accent-glow: rgba(37, 99, 235, 0.2);
+
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="oled"] {
+  --bg-primary: #000000;
+  --bg-secondary: #000000;
+  --bg-glass: rgba(0, 0, 0, 0.75);
+  
+  --border-color: rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.08);
+}
+
 * {
   margin: 0;
   padding: 0;

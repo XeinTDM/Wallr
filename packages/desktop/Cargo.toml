@@ -10,8 +10,13 @@ api = { workspace = true }
 image = "0.25.10"
 tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
 tower-http = { version = "0.6.10", features = ["fs"] }
+muda = "0.19.1"
+tray-icon = "0.24.0"
+global-hotkey = "0.8.0"
+rand = "0.8.5"
+wallpaper = "3.2.0"
 
 [features]
 default = ["desktop"]
-desktop = ["dioxus/desktop"]
+desktop = ["dioxus/desktop", "ui/desktop"]
 server = ["dioxus/server", "ui/server"]

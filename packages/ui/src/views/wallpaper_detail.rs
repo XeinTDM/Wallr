@@ -1,8 +1,73 @@
 use crate::app::{AuthState, Route};
 use crate::{LoadingScreen, WallpaperCard, use_toaster};
-use api::{get_wallpaper_by_id, get_wallpapers};
+use api::get_wallpaper_by_id;
 use dioxus::prelude::*;
-use lucide_dioxus::{Download, Heart, Plus, Trash2};
+use lucide_dioxus::{Download, Heart, Plus, Shield, Trash2};
+
+#[cfg(feature = "desktop")]
+async fn set_desktop_wallpaper(wp_id: String, image_url: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let filename = image_url
+            .strip_prefix("/assets/uploads/")
+            .unwrap_or(&image_url);
+        let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets/uploads")
+            .join(filename);
+        let img = image::open(&full_path).map_err(|e| e.to_string())?;
+        let temp_dir = std::env::temp_dir();
+        let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
+        img.save(&temp_path).map_err(|e| e.to_string())?;
+
+        wallpaper::set_from_path(temp_path.to_str().unwrap()).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .unwrap_or(Err("Task failed".to_string()))
+}
+
+#[cfg(feature = "desktop")]
+async fn save_as_native(wp_title: String, image_url: String) -> Result<(), String> {
+    let filename = image_url
+        .strip_prefix("/assets/uploads/")
+        .unwrap_or(&image_url);
+    let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("assets/uploads")
+        .join(filename);
+
+    let default_name = format!("{}.avif", wp_title.replace(" ", "_"));
+
+    // Spawn blocking to use the synchronous rfd file dialog
+    let target_path = tokio::task::spawn_blocking(move || {
+        rfd::FileDialog::new()
+            .set_title("Save Wallpaper As")
+            .set_file_name(&default_name)
+            .add_filter("AVIF Image", &["avif"])
+            .add_filter("All Files", &["*"])
+            .save_file()
+    })
+    .await
+    .unwrap_or(None);
+
+    if let Some(path) = target_path {
+        // Copy the file
+        tokio::fs::copy(&full_path, &path)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Try to reveal it in explorer
+        let parent = path.parent().map(|p| p.to_path_buf());
+        if let Some(dir) = parent {
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = open::that(dir);
+            })
+            .await;
+        }
+
+        Ok(())
+    } else {
+        Err("Cancelled".to_string())
+    }
+}
 
 #[component]
 pub fn WallpaperDetail(id: String) -> Element {
@@ -11,6 +76,7 @@ pub fn WallpaperDetail(id: String) -> Element {
     let mut new_tag_input = use_signal(|| String::new());
 
     let mut toaster = use_toaster();
+    let i18n = crate::i18n::use_i18n();
     let nav = use_navigator();
 
     let mut is_download_menu_open = use_signal(|| false);
@@ -63,7 +129,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                         link.set_attribute("href", &url).unwrap();
                         link.set_attribute("target", "_blank").unwrap();
                         let _ = link.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
-                        toaster_clone.success("Download started!");
+                        toaster_clone.success(i18n.t("success_download_started"));
                     }
                 } else if key_str == "f" || key_str == "l" {
                     event.prevent_default();
@@ -118,6 +184,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                         format!("{:.2} MB", wp.size_bytes as f64 / 1048576.0)
                     };
                     let delete_id = wp.id.clone();
+                    let delete_id_clone = delete_id.clone();
                     let is_author = if let AuthState::Authenticated(u) = auth_state() { u.name == wp.author } else { false };
                     let is_admin = if let AuthState::Authenticated(u) = auth_state() { u.role == "admin" } else { false };
 
@@ -157,13 +224,13 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     if wp.is_private {
                                         span {
                                             style: "padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; background: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); text-transform: uppercase; letter-spacing: 0.05em;",
-                                            "Private"
+                                            "{i18n.t(\"wp_private\")}"
                                         }
                                     }
                                 }
                                 p {
                                     style: "color: var(--text-secondary); margin-bottom: 32px;",
-                                    "by "
+                                    "{i18n.t(\"wp_by\")}"
                                     Link {
                                         to: Route::PublicProfile { username: wp.author.replace(" ", "-") },
                                         style: "color: var(--accent-primary); text-decoration: none;",
@@ -174,13 +241,13 @@ pub fn WallpaperDetail(id: String) -> Element {
                                 div {
                                     class: "glass",
                                     style: "padding: 24px; border-radius: 20px; margin-bottom: 24px;",
-                                    h4 { style: "margin-bottom: 16px; font-size: 14px; color: var(--text-muted);", "TECHNICAL DETAILS" }
+                                    h4 { style: "margin-bottom: 16px; font-size: 14px; color: var(--text-muted);", "{i18n.t(\"wp_technical_details\")}" }
                                     div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 16px;",
-                                        DetailItem { label: "Resolution", value: "{wp.dimensions.0}x{wp.dimensions.1}" }
-                                        DetailItem { label: "Format", value: if wp.is_live { "Video" } else if wp.image_url.ends_with(".avif") { "AVIF" } else { "Processing..." } }
-                                        DetailItem { label: "Size", value: "{size_display}" }
-                                        DetailItem { label: "Likes", value: "{wp.likes}" }
-                                        DetailItem { label: "Downloads", value: "{wp.downloads}" }
+                                        DetailItem { label: "{i18n.t(\"wp_resolution\")}", value: "{wp.dimensions.0}x{wp.dimensions.1}" }
+                                        DetailItem { label: "{i18n.t(\"wp_format\")}", value: if wp.is_live { "{i18n.t(\"wp_format_video\")}" } else if wp.image_url.ends_with(".avif") { "{i18n.t(\"wp_format_avif\")}" } else { "{i18n.t(\"wp_format_processing\")}" } }
+                                        DetailItem { label: "{i18n.t(\"wp_size\")}", value: "{size_display}" }
+                                        DetailItem { label: "{i18n.t(\"wp_likes\")}", value: "{wp.likes}" }
+                                        DetailItem { label: "{i18n.t(\"wp_downloads\")}", value: "{wp.downloads}" }
                                     }
                             }
 
@@ -209,7 +276,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.2s ease; cursor: pointer;",
                                                     onclick: move |_| is_download_menu_open.toggle(),
                                                     Download { size: 20 }
-                                                    "Download Options"
+                                                    "{i18n.t(\"wp_download_options\")}"
                                                 }
                                                 if is_download_menu_open() {
                                                     div {
@@ -222,8 +289,8 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                                 target: "_blank",
                                                                 style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
                                                                 class: "menu-item-hover",
-                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
-                                                                span { "Original Size" }
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_original_size\")}" }
                                                                 span { style: "color: var(--text-muted); font-size: 12px;", "AVIF" }
                                                             }
                                                             a {
@@ -232,18 +299,28 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                                 target: "_blank",
                                                                 style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
                                                                 class: "menu-item-hover",
-                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
-                                                                span { "4K UHD (3840w)" }
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_4k_uhd\")}" }
                                                                 span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
                                                             }
                                                             a {
-                                                                href: "/wallpaper/{wp.id}/download?width=2560&format=jpg",
+                                                                href: "/wallpaper/{wp.id}/download?width=3440&height=1440&format=jpg",
                                                                 download: "{wp.title}",
                                                                 target: "_blank",
                                                                 style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
                                                                 class: "menu-item-hover",
-                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
-                                                                span { "1440p (2560w)" }
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_ultrawide\")}" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
+                                                            }
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download?width=3024&height=1964&format=jpg",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_macbook_pro\")}" }
                                                                 span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
                                                             }
                                                             a {
@@ -252,11 +329,77 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                                 target: "_blank",
                                                                 style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
                                                                 class: "menu-item-hover",
-                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success("Download started!"); } },
-                                                                span { "1080p (1920w)" }
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_1080p\")}" }
+                                                                span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
+                                                            }
+                                                            a {
+                                                                href: "/wallpaper/{wp.id}/download?width=1179&height=2556&format=jpg",
+                                                                download: "{wp.title}",
+                                                                target: "_blank",
+                                                                style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                class: "menu-item-hover",
+                                                                onclick: { let mut toaster = toaster; move |_| { is_download_menu_open.set(false); toaster.success(i18n.t("success_download_started")); } },
+                                                                span { "{i18n.t(\"wp_iphone_15_pro\")}" }
                                                                 span { style: "color: var(--text-muted); font-size: 12px;", "JPG" }
                                                             }
                                                         }
+                                                    }
+                                                }
+                                            }
+                                            {
+                                                #[cfg(feature = "desktop")]
+                                                rsx! {
+                                                    button {
+                                                        class: "glow-hover",
+                                                        style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); transition: all 0.2s ease; cursor: pointer;",
+                                                        onclick: {
+                                                            let wp_title = wp.title.clone();
+                                                            let image_url = wp.image_url.clone();
+                                                            let toaster = toaster;
+                                                            move |_| {
+                                                                let wp_title = wp_title.clone();
+                                                                let image_url = image_url.clone();
+                                                                let mut toaster = toaster;
+                                                                spawn(async move {
+                                                                    match save_as_native(wp_title, image_url).await {
+                                                                        Ok(_) => toaster.success("Saved successfully!"),
+                                                                        Err(e) if e == "Cancelled" => {},
+                                                                        Err(e) => toaster.error(format!("Failed: {}", e)),
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                        lucide_dioxus::Save { size: 20 }
+                                                        "Save As..."
+                                                    }
+                                                }
+                                            }
+                                            {
+                                                #[cfg(feature = "desktop")]
+                                                rsx! {
+                                                    button {
+                                                        class: "glow-hover",
+                                                        style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent-primary); border: none; color: white; transition: all 0.2s ease; cursor: pointer;",
+                                                        onclick: {
+                                                            let wp_id = wp.id.clone();
+                                                            let image_url = wp.image_url.clone();
+                                                            let toaster = toaster;
+                                                            move |_| {
+                                                                let wp_id = wp_id.clone();
+                                                                let image_url = image_url.clone();
+                                                                let mut toaster = toaster;
+                                                                spawn(async move {
+                                                                    toaster.info("Applying wallpaper...");
+                                                                    match set_desktop_wallpaper(wp_id, image_url).await {
+                                                                        Ok(_) => toaster.success("Desktop background updated!"),
+                                                                        Err(e) => toaster.error(format!("Failed: {}", e)),
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                        lucide_dioxus::Monitor { size: 20 }
+                                                        "Set Background"
                                                     }
                                                 }
                                             }
@@ -266,7 +409,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     button {
                                         disabled: true,
                                         style: "flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.1); color: var(--text-muted); cursor: not-allowed;",
-                                        "Processing AVIF..."
+                                        "{i18n.t(\"wp_processing_avif\")}"
                                     }
                                 }
                                 button {
@@ -298,7 +441,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     match my_cols() {
                                                         Some(Ok(list)) => {
                                                             if list.is_empty() {
-                                                                rsx! { div { style: "color: var(--text-muted); font-size: 14px;", "No collections found." } }
+                                                                rsx! { div { style: "color: var(--text-muted); font-size: 14px;", "{i18n.t(\"wp_no_collections\")}" } }
                                                             } else {
                                                                 rsx! {
                                                                     div {
@@ -319,9 +462,9 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                                                         let mut toaster = toaster;
                                                                                         spawn(async move {
                                                                                             if let Ok(_) = api::add_wallpaper_to_collection(c_id, w_id).await {
-                                                                                                toaster.success("Added to collection!");
+                                                                                                toaster.success(i18n.t("success_added_collection"));
                                                                                             } else {
-                                                                                                toaster.error("Failed to add to collection.");
+                                                                                                toaster.error(i18n.t("err_add_collection"));
                                                                                             }
                                                                                         });
                                                                                     }
@@ -333,7 +476,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                                 }
                                                             }
                                                         },
-                                                        _ => rsx! { div { "Loading..." } }
+                                                        _ => rsx! { div { "{i18n.t(\"loading\")}" } }
                                                     }
                                                 }
                                             }
@@ -374,15 +517,48 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     if is_admin_clone && !is_author_clone {
                                                         toaster.info(format!("Admin: Deleted '{}'. Reason: {}", wp_title, reason.unwrap_or_else(|| "None provided".into())));
                                                     } else {
-                                                        toaster.success("Wallpaper deleted.");
+                                                        toaster.success(i18n.t("success_wallpaper_deleted"));
                                                     }
                                                     nav.push(Route::Home {});
                                                 } else {
-                                                    toaster.error("Failed to delete wallpaper");
+                                                    toaster.error(i18n.t("err_delete_wallpaper"));
                                                 }
                                             });
                                         },
                                         Trash2 { size: 24 }
+                                    }
+                                }
+                                if is_admin {
+                                    button {
+                                        class: "glass glow-hover",
+                                        style: "width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1); background: rgba(239, 68, 68, 0.3); cursor: pointer; transition: all 0.2s ease; color: white;",
+                                        title: "Admin: Ban Wallpaper & Hash",
+                                        onclick: move |_| {
+                                            let id_to_delete = delete_id_clone.clone();
+                                            let mut toaster = toaster;
+                                            let nav = nav;
+                                            spawn(async move {
+                                                #[allow(unused_mut)]
+                                                let mut reason = None;
+                                                #[cfg(target_arch = "wasm32")]
+                                                if let Some(window) = web_sys::window() {
+                                                    if let Ok(Some(r)) = window.prompt_with_message("Ban Reason:") {
+                                                        reason = Some(r);
+                                                    } else {
+                                                        return;
+                                                    }
+                                                }
+                                                if let Some(r) = reason {
+                                                    if let Ok(_) = api::admin_ban_wallpaper_and_hash(id_to_delete, r).await {
+                                                        toaster.success(i18n.t("success_banned_hashed"));
+                                                        nav.push(Route::Home {});
+                                                    } else {
+                                                        toaster.error(i18n.t("err_ban"));
+                                                    }
+                                                }
+                                            });
+                                        },
+                                        Shield { size: 24 }
                                     }
                                 }
                             }
@@ -416,7 +592,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     type: "text",
                                                     value: "{new_tag_input}",
                                                     oninput: move |e| new_tag_input.set(e.value()),
-                                                    placeholder: "New tag...",
+                                                    placeholder: "{i18n.t(\"wp_new_tag\")}",
                                                     style: "padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 700; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.4); color: white; outline: none; width: 100px;",
                                                     autofocus: "true"
                                                 }
@@ -439,7 +615,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                     // Related Wallpapers
                     div {
                         style: "margin-top: 80px;",
-                        h2 { style: "margin-bottom: 32px;", "More like this" }
+                        h2 { style: "margin-bottom: 32px;", "{i18n.t(\"wp_more_like_this\")}" }
                         div {
                             style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px;",
                             match related() {
@@ -457,10 +633,10 @@ pub fn WallpaperDetail(id: String) -> Element {
                     }
                 } },
                 Some(Ok(None)) => rsx! {
-                    div { "Wallpaper not found." }
+                    div { "{i18n.t(\"wp_not_found\")}" }
                 },
                 Some(Err(e)) => rsx! {
-                    div { class: "error", "Error: {e}" }
+                    div { class: "error", "{i18n.t(\"error\")}: {e}" }
                 },
                 None => rsx! {
                     LoadingScreen {}
@@ -530,11 +706,12 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
     let mut new_comment = use_signal(String::new);
     let is_auth = use_context::<Signal<crate::app::AuthState>>();
     let toaster = use_toaster();
+    let i18n = crate::i18n::use_i18n();
 
     rsx! {
         div {
             style: "margin-top: 80px;",
-            h2 { style: "margin-bottom: 32px;", "Comments" }
+            h2 { style: "margin-bottom: 32px;", "{i18n.t(\"wp_comments\")}" }
 
             if let crate::app::AuthState::Authenticated(u) = is_auth() {
                 div {
@@ -545,7 +722,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                         textarea {
                             class: "glass",
                             style: "width: 100%; box-sizing: border-box; min-height: 80px; padding: 12px; border-radius: 12px; color: white; resize: vertical; border: 1px solid rgba(255,255,255,0.1);",
-                            placeholder: "Add a comment...",
+                            placeholder: "{i18n.t(\"wp_add_comment\")}",
                             value: "{new_comment}",
                             oninput: move |e| new_comment.set(e.value()),
                             maxlength: "500"
@@ -576,16 +753,16 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                                                     text_sig.set(String::new());
                                                     p.set(0);
                                                     res.restart();
-                                                    toaster.success("Comment added");
+                                                    toaster.success(i18n.t("success_comment_added"));
                                                 }
                                                 Err(e) => {
-                                                    toaster.error(&e.to_string());
+                                                    toaster.error(e.to_string());
                                                 }
                                             }
                                         });
                                     }
                                 },
-                                "Post Comment"
+                                "{i18n.t(\"wp_post_comment\")}"
                             }
                         }
                     }
@@ -593,7 +770,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
             } else {
                 div {
                     style: "margin-bottom: 32px; padding: 24px; background: rgba(255,255,255,0.02); border-radius: 12px; text-align: center; border: 1px dashed rgba(255,255,255,0.1);",
-                    p { style: "color: var(--text-secondary); margin-bottom: 12px;", "Log in to join the conversation." }
+                    p { style: "color: var(--text-secondary); margin-bottom: 12px;", "{i18n.t(\"wp_login_to_comment\")}" }
                     Link {
                         to: Route::Login {},
                         class: "glow-hover",
@@ -607,11 +784,11 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                 style: "display: flex; flex-direction: column; gap: 24px;",
                 if all_comments().is_empty() {
                     if let Some(Ok(_)) = comments_res() {
-                        p { style: "color: var(--text-muted); text-align: center; padding: 24px;", "No comments yet. Be the first to share your thoughts!" }
+                        p { style: "color: var(--text-muted); text-align: center; padding: 24px;", "{i18n.t(\"wp_no_comments_yet\")}" }
                     } else if let Some(Err(_)) = comments_res() {
-                        p { style: "color: #ef4444;", "Failed to load comments." }
+                        p { style: "color: #ef4444;", "{i18n.t(\"wp_failed_load_comments\")}" }
                     } else {
-                        div { "Loading comments..." }
+                        div { "{i18n.t(\"wp_loading_comments\")}" }
                     }
                 } else {
                     for comment in all_comments() {
@@ -651,9 +828,9 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                                                             if let Ok(_) = api::delete_wallpaper_comment(c_id).await {
                                                                 p.set(0);
                                                                 res.restart();
-                                                                toaster.success("Comment deleted");
+                                                                toaster.success(i18n.t("success_comment_deleted"));
                                                             } else {
-                                                                toaster.error("Failed to delete comment");
+                                                                toaster.error(i18n.t("err_delete_comment"));
                                                             }
                                                         });
                                                     }
@@ -677,7 +854,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                                 onclick: move |_| {
                                     page.set(page() + 1);
                                 },
-                                "Load More"
+                                "{i18n.t(\"btn_load_more\")}"
                             }
                         }
                     }

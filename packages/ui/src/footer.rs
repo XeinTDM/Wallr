@@ -14,6 +14,8 @@ pub struct FooterProps<R: Routable + Clone + PartialEq + 'static> {
 
 #[component]
 pub fn Footer<R: Routable + Clone + PartialEq + 'static>(props: FooterProps<R>) -> Element {
+    let mut i18n = crate::i18n::use_i18n();
+
     rsx! {
         document::Stylesheet { href: FOOTER_CSS }
         footer {
@@ -32,37 +34,53 @@ pub fn Footer<R: Routable + Clone + PartialEq + 'static>(props: FooterProps<R>) 
                             style: "height: 62px; opacity: 0.9;"
                         }
                     }
-                    p { "A hyper-optimized, pure-Rust wallpaper engine. AVIF-native, zero-latency, and privacy-focused." }
+                    p { "{i18n.t(\"footer_desc\")}" }
                 }
                 div {
                     class: "footer-links-container",
                     div {
                         class: "footer-group",
-                        h6 { "Platform" }
-                        Link { to: props.home_route.clone(), "Home" }
-                        Link { to: props.about_route.clone(), "About" }
-                        Link { to: props.faq_route.clone(), "FAQ" }
+                        h6 { "{i18n.t(\"platform\")}" }
+                        Link { to: props.home_route.clone(), "{i18n.t(\"home\")}" }
+                        Link { to: props.about_route.clone(), "{i18n.t(\"about\")}" }
+                        Link { to: props.faq_route.clone(), "{i18n.t(\"faq\")}" }
                     }
                     div {
                         class: "footer-group",
-                        h6 { "Legal" }
-                        Link { to: props.terms_route.clone(), "Terms" }
-                        Link { to: props.privacy_route.clone(), "Privacy" }
+                        h6 { "{i18n.t(\"legal\")}" }
+                        Link { to: props.terms_route.clone(), "{i18n.t(\"terms\")}" }
+                        Link { to: props.privacy_route.clone(), "{i18n.t(\"privacy\")}" }
                     }
                     div {
                         class: "footer-group",
-                        h6 { "Community" }
-                        a { href: "https://github.com/XeinTDM/wallr", target: "_blank", "GitHub" }
-                        a { href: "https://discord.gg/dioxus", target: "_blank", "Discord" }
+                        h6 { "{i18n.t(\"community\")}" }
+                        a { href: "https://github.com/XeinTDM/wallr", target: "_blank", "{i18n.t(\"github\")}" }
+                        a { href: "https://discord.gg/dioxus", target: "_blank", "{i18n.t(\"discord\")}" }
                     }
                 }
                 div {
                     class: "footer-bottom",
+                    style: "display: flex; justify-content: space-between; align-items: center; width: 100%;",
                     p {
-                        "© 2026 WALLR. Built with "
+                        "© 2026 WALLR. {i18n.t(\"built_with\")}"
                         span { style: "color: var(--accent-secondary); font-weight: 600;", "Dioxus" }
-                        " and "
+                        "{i18n.t(\"and\")}"
                         span { style: "color: #ff4d4d;", "❤️" }
+                    }
+                    div {
+                        style: "display: flex; gap: 12px; align-items: center;",
+                        button {
+                            class: "glass glow-hover",
+                            style: if i18n.get_lang() == crate::i18n::Language::English { "padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent-primary); color: white; background: rgba(255,255,255,0.1); cursor: pointer;" } else { "padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); background: transparent; cursor: pointer;" },
+                            onclick: move |_| i18n.set_lang(crate::i18n::Language::English),
+                            "EN"
+                        }
+                        button {
+                            class: "glass glow-hover",
+                            style: if i18n.get_lang() == crate::i18n::Language::Spanish { "padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent-primary); color: white; background: rgba(255,255,255,0.1); cursor: pointer;" } else { "padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); background: transparent; cursor: pointer;" },
+                            onclick: move |_| i18n.set_lang(crate::i18n::Language::Spanish),
+                            "ES"
+                        }
                     }
                 }
             }

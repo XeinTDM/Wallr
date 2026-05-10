@@ -4,6 +4,8 @@ pub mod ai;
 #[cfg(feature = "server")]
 pub mod error;
 #[cfg(feature = "server")]
+pub mod oauth;
+#[cfg(feature = "server")]
 pub mod processor;
 #[cfg(feature = "server")]
 pub mod profanity;
@@ -62,7 +64,7 @@ pub async fn require_auth() -> Result<User, dioxus::prelude::ServerFnError> {
     use dioxus_fullstack::FullstackContext;
     FullstackContext::extract::<User, _>()
         .await
-        .map_err(|_| dioxus::prelude::ServerFnError::new("Unauthorized"))
+        .map_err(|_| dioxus::prelude::ServerFnError::new("api_err_unauthorized"))
 }
 
 #[cfg(feature = "server")]
@@ -96,6 +98,7 @@ pub struct Wallpaper {
     pub is_private: bool,
     pub is_live: bool,
     pub embedding: Option<Vec<f32>>,
+    pub phash: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -308,7 +311,7 @@ pub async fn get_public_user_collections(
             .await
             .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
     } else {
-        Err(ServerFnError::new("User not found"))
+        Err(ServerFnError::new("api_err_user_not_found"))
     }
 }
 
@@ -397,6 +400,7 @@ pub async fn upload_raw_impl(
         img_opt,
         is_live,
         embedding,
+        phash_bytes,
     ) = tokio::task::spawn_blocking(move || {
         let is_mp4 = bytes.len() > 8 && &bytes[4..8] == b"ftyp";
         let is_webm = bytes.len() > 4 && bytes[0..4] == [0x1A, 0x45, 0xDF, 0xA3];
@@ -446,15 +450,36 @@ pub async fn upload_raw_impl(
 
         let (width, height) = (img.width(), img.height());
 
+        let hasher = img_hash::HasherConfig::new()
+            .hash_alg(img_hash::HashAlg::Gradient)
+            .to_hasher();
+            
+        let rgba = img.to_rgba8();
+        let img_for_hash = img_hash::image::RgbaImage::from_raw(img.width(), img.height(), rgba.into_raw())
+            .ok_or_else(|| anyhow::anyhow!("Failed to convert image for hashing"))?;
+        let phash = hasher.hash_image(&img_for_hash);
+        let phash_bytes = phash.as_bytes().to_vec();
+
+        let is_banned = tokio::runtime::Handle::current().block_on(crate::storage::check_banned_phash(&phash_bytes))?;
+        if is_banned {
+            return Err(anyhow::anyhow!(
+                "Upload rejected due to illegal content policy."
+            ));
+        }
+
         let primary_colors = crate::processor::extract_dominant_colors(&img);
 
-        let (mut tags, embedding) = if let Some(tagger) = crate::ai::TAGGER.get() {
+        let (mut tags, embedding, is_nsfw) = if let Some(tagger) = crate::ai::TAGGER.get() {
             tagger
                 .tag_image(&img)
-                .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512]))
+                .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512], false))
         } else {
-            (vec!["misc".to_string()], vec![0.0; 512])
+            (vec!["misc".to_string()], vec![0.0; 512], false)
         };
+
+        if is_nsfw && !tags.contains(&"nsfw".to_string()) {
+            tags.push("nsfw".to_string());
+        }
 
         for ut in user_tags {
             if !tags.contains(&ut) {
@@ -500,6 +525,7 @@ pub async fn upload_raw_impl(
             final_img_opt,
             is_live,
             embedding,
+            phash_bytes,
         ))
     })
     .await??;
@@ -520,6 +546,7 @@ pub async fn upload_raw_impl(
         is_private,
         is_live,
         embedding: Some(embedding),
+        phash: Some(phash_bytes),
     };
 
     crate::storage::save_wallpaper_data(&wallpaper).await?;
@@ -588,14 +615,14 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
     use dioxus_fullstack::FullstackContext;
 
     if password.len() < 8 || password.len() > 128 {
-        return Err(ServerFnError::new("Invalid email or password"));
+        return Err(ServerFnError::new("api_err_invalid_login"));
     }
 
     let email = email.trim().to_lowercase();
 
     let headers = FullstackContext::extract::<http::HeaderMap, _>()
         .await
-        .map_err(|_| ServerFnError::new("Unauthorized"))?;
+        .map_err(|_| ServerFnError::new("api_err_unauthorized"))?;
 
     let connect_info =
         FullstackContext::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>, _>().await;
@@ -622,7 +649,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
             )
         })
         .await
-        .map_err(|_| ServerFnError::new("Task error"))?
+        .map_err(|_| ServerFnError::new("api_err_task"))?
         .map_err(|e| ServerFnError::new(e))?
     } else {
         let pass_clone = password.clone();
@@ -638,7 +665,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
     if is_valid {
         if let Some(user_record) = user_record_opt {
             if user_record.user.is_banned {
-                return Err(ServerFnError::new("Account is banned"));
+                return Err(ServerFnError::new("api_err_account_banned"));
             }
 
             let token =
@@ -661,7 +688,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
         }
     }
 
-    Err(ServerFnError::new("Invalid email or password"))
+    Err(ServerFnError::new("api_err_invalid_login"))
 }
 
 #[server]
@@ -684,7 +711,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
 
     let headers = FullstackContext::extract::<http::HeaderMap, _>()
         .await
-        .map_err(|_| ServerFnError::new("Unauthorized"))?;
+        .map_err(|_| ServerFnError::new("api_err_unauthorized"))?;
 
     let connect_info =
         FullstackContext::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>, _>().await;
@@ -699,7 +726,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
     if existing_user.is_some() {
-        return Err(ServerFnError::new("User with this email already exists"));
+        return Err(ServerFnError::new("api_err_email_exists"));
     }
 
     let password_hash = tokio::task::spawn_blocking(move || {
@@ -710,7 +737,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
             .map_err(|e| format!("Hashing error: {}", e))
     })
     .await
-    .map_err(|_| ServerFnError::new("Task error"))?
+    .map_err(|_| ServerFnError::new("api_err_task"))?
     .map_err(|e| ServerFnError::new(e))?;
 
     let mut hasher = Sha256::new();
@@ -890,7 +917,7 @@ pub async fn change_password(
     let user_record = crate::storage::get_user_by_id(&user.id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
-        .ok_or_else(|| ServerFnError::new("User not found"))?;
+        .ok_or_else(|| ServerFnError::new("api_err_user_not_found"))?;
 
     let hash_clone = user_record.password_hash.clone();
     let is_valid = tokio::task::spawn_blocking(move || {
@@ -903,11 +930,11 @@ pub async fn change_password(
         )
     })
     .await
-    .map_err(|_| ServerFnError::new("Task error"))?
+    .map_err(|_| ServerFnError::new("api_err_task"))?
     .map_err(|e| ServerFnError::new(e))?;
 
     if !is_valid {
-        return Err(ServerFnError::new("Incorrect current password"));
+        return Err(ServerFnError::new("api_err_wrong_pwd"));
     }
 
     let new_password_hash = tokio::task::spawn_blocking(move || {
@@ -918,7 +945,7 @@ pub async fn change_password(
             .map_err(|e| format!("Hashing error: {}", e))
     })
     .await
-    .map_err(|_| ServerFnError::new("Task error"))?
+    .map_err(|_| ServerFnError::new("api_err_task"))?
     .map_err(|e| ServerFnError::new(e))?;
 
     crate::storage::update_password(&user.id, &new_password_hash)
@@ -959,7 +986,7 @@ pub async fn add_tag_to_wallpaper(wallpaper_id: String, tag: String) -> Result<(
     let user = require_auth().await?;
     let tag = tag.trim().to_lowercase();
     if tag.is_empty() {
-        return Err(ServerFnError::new("Tag cannot be empty"));
+        return Err(ServerFnError::new("api_err_tag_empty"));
     }
 
     let wp_opt = crate::storage::get_wallpaper_by_id(&wallpaper_id)
@@ -968,11 +995,11 @@ pub async fn add_tag_to_wallpaper(wallpaper_id: String, tag: String) -> Result<(
 
     let wp = match wp_opt {
         Some(w) => w,
-        None => return Err(ServerFnError::new("Wallpaper not found")),
+        None => return Err(ServerFnError::new("api_err_wp_not_found")),
     };
 
     if wp.author != user.name {
-        return Err(ServerFnError::new("Unauthorized"));
+        return Err(ServerFnError::new("api_err_unauthorized"));
     }
     crate::storage::add_tag(&wallpaper_id, &tag)
         .await
@@ -1009,11 +1036,11 @@ pub async fn delete_wallpaper_endpoint(id: String) -> Result<(), ServerFnError> 
 
     let wp = match wp_opt {
         Some(w) => w,
-        None => return Err(ServerFnError::new("Wallpaper not found")),
+        None => return Err(ServerFnError::new("api_err_wp_not_found")),
     };
 
     if wp.author != user.name {
-        return Err(ServerFnError::new("Unauthorized"));
+        return Err(ServerFnError::new("api_err_unauthorized"));
     }
 
     crate::storage::delete_wallpaper(&id)
@@ -1108,13 +1135,13 @@ pub async fn add_wallpaper_comment(
     let user = require_auth().await?;
     let content = content.trim();
     if content.is_empty() {
-        return Err(ServerFnError::new("Comment cannot be empty"));
+        return Err(ServerFnError::new("api_err_comment_empty"));
     }
     if content.chars().count() > 500 {
-        return Err(ServerFnError::new("Comment cannot exceed 500 characters"));
+        return Err(ServerFnError::new("api_err_comment_toolong"));
     }
     if crate::profanity::contains_forbidden_words(content).await {
-        return Err(ServerFnError::new("Comment contains forbidden language"));
+        return Err(ServerFnError::new("api_err_comment_forbidden"));
     }
 
     let is_duplicate = crate::storage::check_duplicate_comment(&wallpaper_id, &user.id, content)
@@ -1255,11 +1282,11 @@ pub async fn admin_ban_user(user_id: String, banned: bool) -> Result<(), ServerF
             ));
         }
         if target_user.user.role == "admin" && admin.role == "moderator" {
-            return Err(ServerFnError::new("Moderators cannot ban admins."));
+            return Err(ServerFnError::new("api_err_mod_ban_admin"));
         }
     }
     if admin.id == user_id {
-        return Err(ServerFnError::new("You cannot ban yourself."));
+        return Err(ServerFnError::new("api_err_ban_self"));
     }
     crate::storage::admin_ban_user_db(&user_id, banned)
         .await
@@ -1370,6 +1397,33 @@ pub async fn report_wallpaper(wallpaper_id: String, reason: String) -> Result<()
 }
 
 #[server]
+pub async fn admin_ban_wallpaper_and_hash(
+    wallpaper_id: String,
+    reason: String,
+) -> Result<(), ServerFnError> {
+    let admin = require_moderator().await?;
+    let wp = crate::storage::get_wallpaper_by_id(&wallpaper_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
+        .ok_or_else(|| {
+            crate::error::ApiError::from(anyhow::anyhow!("Wallpaper not found"))
+                .into_server_fn_err()
+        })?;
+
+    if let Some(phash) = wp.phash {
+        crate::storage::add_banned_hash(&phash, &admin.id, &reason)
+            .await
+            .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    }
+
+    crate::storage::delete_wallpaper(&wallpaper_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(())
+}
+
+#[server]
 pub async fn get_reported_wallpapers(
     status: Option<String>,
 ) -> Result<Vec<ReportedWallpaper>, ServerFnError> {
@@ -1465,7 +1519,7 @@ pub async fn reset_password_with_token(
             .map_err(|e| format!("Hashing error: {}", e))
     })
     .await
-    .map_err(|_| ServerFnError::new("Task error"))?
+    .map_err(|_| ServerFnError::new("api_err_task"))?
     .map_err(|e| ServerFnError::new(e))?;
 
     crate::storage::consume_password_reset_token_db(&token, &new_password_hash)
@@ -1506,7 +1560,7 @@ pub async fn get_followers(
     let target_user = crate::storage::get_user_by_name(&username)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
-        .ok_or_else(|| dioxus::prelude::ServerFnError::new("User not found"))?;
+        .ok_or_else(|| dioxus::prelude::ServerFnError::new("api_err_user_not_found"))?;
 
     let followers = crate::storage::get_followers_db(&target_user.user.id, limit_i64, offset_i64)
         .await
@@ -1527,7 +1581,7 @@ pub async fn get_following(
     let target_user = crate::storage::get_user_by_name(&username)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
-        .ok_or_else(|| dioxus::prelude::ServerFnError::new("User not found"))?;
+        .ok_or_else(|| dioxus::prelude::ServerFnError::new("api_err_user_not_found"))?;
 
     let following = crate::storage::get_following_db(&target_user.user.id, limit_i64, offset_i64)
         .await

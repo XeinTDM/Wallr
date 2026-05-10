@@ -30,6 +30,9 @@ pub use category_hero::CategoryHero;
 mod loading_screen;
 pub use loading_screen::LoadingScreen;
 
+pub mod i18n;
+pub use i18n::*;
+
 pub mod app;
 pub mod views;
 

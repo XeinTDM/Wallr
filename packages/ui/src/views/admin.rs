@@ -7,6 +7,7 @@ use lucide_dioxus::{
 
 #[component]
 pub fn Admin() -> Element {
+    let i18n = crate::i18n::use_i18n();
     let auth_state = use_context::<Signal<AuthState>>();
     let nav = use_navigator();
 
@@ -51,7 +52,7 @@ pub fn Admin() -> Element {
                 h1 {
                     style: "font-size: 36px; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 16px;",
                     Activity { size: 36, color: "var(--accent-primary)" }
-                    "Admin Dashboard"
+                    "{i18n.t(\"admin_dashboard_title\")}"
                 }
                 div {
                     style: "display: flex; gap: 12px;",
@@ -60,7 +61,7 @@ pub fn Admin() -> Element {
                         div {
                             style: "width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; animation: pulse 2s infinite;"
                         }
-                        "Live Updates Active"
+                        "{i18n.t(\"admin_live_updates\")}"
                     }
                 }
             }
@@ -70,10 +71,10 @@ pub fn Admin() -> Element {
                     rsx! {
                         div {
                             style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 48px;",
-                            StatCard { title: "Total Users", value: stats.total_users.to_string(), icon: rsx!{ Users { size: 24, color: "#60a5fa" } }, color: "#60a5fa" }
-                            StatCard { title: "Wallpapers", value: stats.total_wallpapers.to_string(), icon: rsx!{ ImageIcon { size: 24, color: "#a78bfa" } }, color: "#a78bfa" }
-                            StatCard { title: "Downloads", value: stats.total_downloads.to_string(), icon: rsx!{ Download { size: 24, color: "#34d399" } }, color: "#34d399" }
-                            StatCard { title: "Total Likes", value: stats.total_likes.to_string(), icon: rsx!{ Heart { size: 24, color: "#f43f5e" } }, color: "#f43f5e" }
+                            StatCard { title: "{i18n.t(\"admin_stat_users\")}", value: stats.total_users.to_string(), icon: rsx!{ Users { size: 24, color: "#60a5fa" } }, color: "#60a5fa" }
+                            StatCard { title: "{i18n.t(\"admin_stat_wallpapers\")}", value: stats.total_wallpapers.to_string(), icon: rsx!{ ImageIcon { size: 24, color: "#a78bfa" } }, color: "#a78bfa" }
+                            StatCard { title: "{i18n.t(\"admin_stat_downloads\")}", value: stats.total_downloads.to_string(), icon: rsx!{ Download { size: 24, color: "#34d399" } }, color: "#34d399" }
+                            StatCard { title: "{i18n.t(\"admin_stat_likes\")}", value: stats.total_likes.to_string(), icon: rsx!{ Heart { size: 24, color: "#f43f5e" } }, color: "#f43f5e" }
                         }
                     }
                 },
@@ -106,12 +107,12 @@ pub fn Admin() -> Element {
                         h2 {
                             style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                             ClipboardList { size: 24, color: "var(--accent-primary)" }
-                            "Recent Audit Logs"
+                            "{i18n.t(\"admin_recent_audit_logs\")}"
                         }
                     match audit_res() {
                         Some(Ok(logs)) => {
                             if logs.is_empty() {
-                                rsx! { p { style: "color: var(--text-muted);", "No audit logs available." } }
+                                rsx! { p { style: "color: var(--text-muted);", "{i18n.t(\"admin_no_audit_logs\")}" } }
                             } else {
                                 rsx! {
                                     div {
@@ -176,23 +177,23 @@ pub fn Admin() -> Element {
                     h2 {
                         style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         Users { size: 24, color: "#60a5fa" }
-                        "User Management"
+                        "{i18n.t(\"admin_user_mgmt\")}"
                     }
-                    p { style: "color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;", "View recent users, ban or unban accounts, and bulk delete spam users." }
+                    p { style: "color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;", "{i18n.t(\"admin_user_mgmt_desc\")}" }
                     div {
                         style: "display: flex; gap: 12px; margin-top: 24px;",
                         Link {
                             to: Route::AdminUsers {},
                             class: "glow-hover",
                             style: "padding: 12px 24px; border-radius: 12px; background: rgba(96, 165, 250, 0.2); border: 1px solid rgba(96, 165, 250, 0.5); color: #93c5fd; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
-                            "Open User Management"
+                            "{i18n.t(\"admin_open_user_mgmt\")}"
                             ArrowRight { size: 18 }
                         }
                         Link {
                             to: Route::AdminReports {},
                             class: "glow-hover",
                             style: "padding: 12px 24px; border-radius: 12px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fcd34d; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
-                            "Review Reports"
+                            "{i18n.t(\"admin_review_reports\")}"
                             ArrowRight { size: 18 }
                         }
                     }
@@ -207,7 +208,7 @@ pub fn Admin() -> Element {
                     h2 {
                         style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
                         ShieldAlert { size: 24, color: "var(--accent-primary)" }
-                        "Quick Moderation Tools"
+                        "{i18n.t(\"admin_quick_moderation\")}"
                     }
                     div {
                         style: "display: flex; flex-direction: column; gap: 16px;",
@@ -219,7 +220,7 @@ pub fn Admin() -> Element {
                                 to: Route::Latest {},
                                 class: "glow-hover",
                                 style: "padding: 12px 24px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
-                                "Review Latest Wallpapers"
+                                "{i18n.t(\"admin_review_latest\")}"
                                 ArrowRight { size: 18 }
                             }
                         }

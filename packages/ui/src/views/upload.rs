@@ -22,7 +22,7 @@ pub fn Upload() -> Element {
     let mut selected_file = use_signal(|| None::<(String, Vec<u8>, String, usize)>);
     let mut toaster = use_toaster();
     let nav = use_navigator();
-
+    let i18n = crate::i18n::use_i18n();
     let user = use_context::<Signal<crate::app::AuthState>>();
 
     match user() {
@@ -36,12 +36,12 @@ pub fn Upload() -> Element {
 
     let upload_action = move |_| async move {
         if title().is_empty() {
-            toaster.error("Please provide a title for your masterpiece!");
+            toaster.error(i18n.t("err_provide_title"));
             return;
         }
 
         if !tos_agreed() {
-            toaster.error("Please confirm you have the rights to upload this image.");
+            toaster.error(i18n.t("err_confirm_rights"));
             return;
         }
 
@@ -123,16 +123,16 @@ pub fn Upload() -> Element {
             match res {
                 Ok(resp) if resp.ok() => {
                     let id = resp.text().await.unwrap_or_default();
-                    toaster.success("Wallpaper successfully published!");
+                    toaster.success(i18n.t("success_upload_published"));
                     nav.push(crate::app::Route::WallpaperDetail { id });
                     return;
                 }
                 Ok(resp) => {
                     let err = resp.text().await.unwrap_or_default();
-                    toaster.error(format!("Upload failed: {}", err));
+                    toaster.error(format!("{}{}", i18n.t("err_upload_failed"), err));
                 }
                 Err(e) => {
-                    toaster.error(format!("Upload failed: {}", e));
+                    toaster.error(format!("{}{}", i18n.t("err_upload_failed"), e));
                 }
             }
 
@@ -140,21 +140,21 @@ pub fn Upload() -> Element {
             match res {
                 Ok(resp) if resp.status().is_success() => {
                     let id = resp.text().await.unwrap_or_default();
-                    toaster.success("Wallpaper successfully published!");
+                    toaster.success(i18n.t("success_upload_published"));
                     nav.push(crate::app::Route::WallpaperDetail { id });
                     return;
                 }
                 Ok(resp) => {
                     let err = resp.text().await.unwrap_or_default();
-                    toaster.error(format!("Upload failed: {}", err));
+                    toaster.error(format!("{}{}", i18n.t("err_upload_failed"), err));
                 }
                 Err(e) => {
-                    toaster.error(format!("Upload failed: {}", e));
+                    toaster.error(format!("{}{}", i18n.t("err_upload_failed"), e));
                 }
             }
             is_uploading.set(false);
         } else {
-            toaster.error("Please select a file first!");
+            toaster.error(i18n.t("err_select_file"));
         }
     };
 
@@ -169,11 +169,11 @@ pub fn Upload() -> Element {
                 h1 {
                     style: "font-size: 48px; font-weight: 900; margin-bottom: 12px;",
                     class: "text-gradient",
-                    "Share Your Art"
+                    "{i18n.t(\"share_art\")}"
                 }
                 p {
                     style: "color: var(--text-secondary); font-size: 18px;",
-                    "Upload high-resolution wallpapers to the Wallr community."
+                    "{i18n.t(\"upload_desc\")}"
                 }
             }
 
@@ -199,7 +199,7 @@ pub fn Upload() -> Element {
                             let name = file.name();
                             if let Ok(bytes) = file.read_bytes().await {
                                 if bytes.len() > 50 * 1024 * 1024 {
-                                    toaster.error("File is too large! Maximum size is 50MB.");
+                                    toaster.error(i18n.t("err_file_too_large"));
                                 } else {
                                     use base64::Engine;
                                     let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else { "image/png" };
@@ -221,7 +221,7 @@ pub fn Upload() -> Element {
                                 let name = file.name();
                                 if let Ok(bytes) = file.read_bytes().await {
                                     if bytes.len() > 50 * 1024 * 1024 {
-                                        toaster.error("File is too large! Maximum size is 50MB.");
+                                        toaster.error(i18n.t("err_file_too_large"));
                                     } else {
                                         use base64::Engine;
                                         let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else { "image/png" };
@@ -254,14 +254,14 @@ pub fn Upload() -> Element {
                                 p {
                                     style: "color: white; font-weight: 800; cursor: pointer; text-shadow: 0 1px 2px rgba(0,0,0,0.8); background: rgba(0,0,0,0.6); padding: 6px 16px; border-radius: 20px; margin-top: 8px; font-size: 14px; border: 1px solid rgba(255,255,255,0.2); transition: all 0.2s;",
                                     onclick: move |e| { e.stop_propagation(); selected_file.set(None); },
-                                    "Change file"
+                                    "{i18n.t(\"change_file\")}"
                                 }
                             }
                         }
                     } else {
                         span { style: "font-size: 48px; margin-bottom: 16px;", "📁" }
-                        h3 { "Click or drag to upload" }
-                        p { style: "color: var(--text-secondary);", "Supports AVIF, PNG, JPG, WEBP, GIF, BMP, TIFF (Max 50MB)" }
+                        h3 { "{i18n.t(\"click_or_drag\")}" }
+                        p { style: "color: var(--text-secondary);", "{i18n.t(\"upload_supports\")}" }
                     }
                 }
 
@@ -274,7 +274,7 @@ pub fn Upload() -> Element {
                             class: "input-group",
                             label {
                                 style: "display: block; margin-bottom: 8px; font-weight: 600;",
-                                "Wallpaper Title"
+                                "{i18n.t(\"wallpaper_title\")}"
                             }
                             input {
                                 class: "glass",
@@ -289,7 +289,7 @@ pub fn Upload() -> Element {
                             class: "input-group",
                             label {
                                 style: "display: block; margin-bottom: 8px; font-weight: 600;",
-                                "Category"
+                                "{i18n.t(\"category\")}"
                             }
                             select {
                                 class: "glass",
@@ -299,7 +299,7 @@ pub fn Upload() -> Element {
                                 for (val, label) in api::tags::CATEGORIES.iter() {
                                     option { key: "{val}", value: "{val}", style: "background: var(--bg-primary);", "{label}" }
                                 }
-                                option { value: "misc", style: "background: var(--bg-primary);", "Miscellaneous" }
+                                option { value: "misc", style: "background: var(--bg-primary);", "{i18n.t(\"miscellaneous\")}" }
                             }
                         }
                     }
@@ -308,7 +308,7 @@ pub fn Upload() -> Element {
                         class: "input-group",
                         label {
                             style: "display: block; margin-bottom: 8px; font-weight: 600;",
-                            "Custom Tags"
+                            "{i18n.t(\"custom_tags\")}"
                         }
                         input {
                             class: "glass",
@@ -319,7 +319,7 @@ pub fn Upload() -> Element {
                         }
                         p {
                             style: "font-size: 13px; color: var(--text-secondary); margin-top: 8px; font-style: italic;",
-                            "Note: Our AI will automatically analyze and add additional relevant tags."
+                            "{i18n.t(\"tags_note\")}"
                         }
                     }
 
@@ -327,7 +327,7 @@ pub fn Upload() -> Element {
                         style: "display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary); font-weight: 500; user-select: none; margin-top: 8px; transition: color 0.2s;",
                         onclick: move |_| show_advanced.set(!show_advanced()),
                         span { style: format!("font-size: 14px; transition: transform 0.2s; transform: rotate({}deg); display: inline-block;", if show_advanced() { 90 } else { 0 }), "▶" }
-                        span { "Advanced Options" }
+                        span { "{i18n.t(\"advanced_options\")}" }
                     }
 
                     if show_advanced() {
@@ -337,7 +337,7 @@ pub fn Upload() -> Element {
                                 class: "input-group",
                                 label {
                                     style: "display: block; margin-bottom: 8px; font-weight: 600;",
-                                    "Description (Optional)"
+                                    "{i18n.t(\"description_optional\")}"
                                 }
                                 textarea {
                                     class: "glass",
@@ -352,7 +352,7 @@ pub fn Upload() -> Element {
                                 class: "input-group",
                                 label {
                                     style: "display: block; margin-bottom: 8px; font-weight: 600;",
-                                    "Source URL (Optional)"
+                                    "{i18n.t(\"source_url_optional\")}"
                                 }
                                 input {
                                     class: "glass",
@@ -382,7 +382,7 @@ pub fn Upload() -> Element {
                                     ),
                                 }
                             }
-                            "AI Generated"
+                            "{i18n.t(\"ai_generated\")}"
                         }
                         div {
                             style: "display: flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 500; user-select: none;",
@@ -399,7 +399,7 @@ pub fn Upload() -> Element {
                                     ),
                                 }
                             }
-                            "NSFW / Mature"
+                            "{i18n.t(\"nsfw_mature\")}"
                         }
                         div {
                             style: "display: flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 500; user-select: none;",
@@ -416,7 +416,7 @@ pub fn Upload() -> Element {
                                     ),
                                 }
                             }
-                            "Private (Unlisted)"
+                            "{i18n.t(\"private_unlisted\")}"
                         }
                     }
 
@@ -434,7 +434,7 @@ pub fn Upload() -> Element {
                         }
                         p {
                             style: "font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0;",
-                            "I confirm that I own the rights to this image or it is in the public domain, and it complies with our Terms of Service."
+                            "{i18n.t(\"tos_confirm\")}"
                         }
                     }
 
@@ -447,9 +447,9 @@ pub fn Upload() -> Element {
                             div {
                                 style: format!("position: absolute; top: 0; left: 0; height: 100%; width: {}%; background: rgba(59, 130, 246, 0.3); transition: width 0.2s ease; z-index: 0;", upload_progress()),
                             }
-                            span { style: "z-index: 1;", "Publishing... {upload_progress()}%" }
+                            span { style: "z-index: 1;", "{i18n.t(\"publishing\")}{upload_progress()}%" }
                         } else {
-                            span { style: "z-index: 1;", "Publish Wallpaper" }
+                            span { style: "z-index: 1;", "{i18n.t(\"publish_wallpaper\")}" }
                         }
                     }
                 }

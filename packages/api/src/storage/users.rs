@@ -184,7 +184,7 @@ pub async fn update_profile(
 pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
     let user_record = get_user_by_id(user_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("User not found"))?;
+        .ok_or_else(|| anyhow::anyhow!("api_err_user_not_found"))?;
 
     let favorites = super::wallpapers::get_user_favorites(user_id, 0, 1000).await?;
     let uploads = super::wallpapers::get_user_uploads(&user_record.user.name, 0, 1000).await?;
@@ -381,8 +381,8 @@ pub async fn follow_user_db(follower_id: &str, following_id: &str) -> anyhow::Re
         if let Ok(Some(follower)) = get_user_by_id(follower_id).await {
             let _ = crate::storage::create_notification_db(
                 following_id,
-                "New Follower",
-                &format!("{} started following you.", follower.user.name),
+                "api_notif_new_follower_title",
+                &format!("api_notif_new_follower_body|{}", follower.user.name),
             )
             .await;
         }
@@ -641,8 +641,8 @@ pub async fn admin_ban_user_db(user_id: &str, banned: bool) -> anyhow::Result<()
     if !banned {
         let _ = crate::storage::create_notification_db(
             user_id,
-            "Account Restored",
-            "Your account has been unbanned. Welcome back to Wallr!",
+            "api_notif_account_restored_title",
+            "api_notif_account_restored_body",
         )
         .await;
     }
@@ -703,14 +703,14 @@ pub async fn consume_password_reset_token_db(
 
     let record = match token_record {
         Some(r) => r,
-        None => return Err(anyhow::anyhow!("Invalid reset token")),
+        None => return Err(anyhow::anyhow!("api_err_invalid_token")),
     };
 
     if record.expires_at < now {
         sqlx::query!("DELETE FROM password_reset_tokens WHERE token = $1", token)
             .execute(pool)
             .await?;
-        return Err(anyhow::anyhow!("Reset token has expired"));
+        return Err(anyhow::anyhow!("api_err_token_expired"));
     }
 
     update_password(&record.user_id, new_password_hash).await?;

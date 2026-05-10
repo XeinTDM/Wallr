@@ -7,6 +7,9 @@ const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
     #[cfg(feature = "server")]
+    dotenvy::dotenv().ok();
+
+    #[cfg(feature = "server")]
     {
         use axum::extract::DefaultBodyLimit;
         use axum::response::IntoResponse;
@@ -16,6 +19,8 @@ fn main() {
         struct DownloadQuery {
             format: Option<String>,
             width: Option<u32>,
+            height: Option<u32>,
+            crop: Option<String>,
         }
 
         fn extract_session_token(headers: &axum::http::HeaderMap) -> Option<String> {
@@ -42,6 +47,8 @@ fn main() {
                 .unwrap_or_else(|| "avif".to_string())
                 .to_lowercase();
             let width = query.width;
+            let height = query.height;
+            let _crop = query.crop;
 
             let source_path = if format == "avif" && width.is_none() {
                 format!("packages/ui/assets/uploads/{}_master.avif", id)
@@ -83,7 +90,7 @@ fn main() {
             });
 
             let is_native_format = format == "avif" || format == "jpg" || format == "jpeg";
-            if width.is_none() && is_native_format {
+            if width.is_none() && height.is_none() && is_native_format {
                 let file = match tokio::fs::File::open(&source_path).await {
                     Ok(f) => f,
                     Err(_) => {
@@ -140,8 +147,14 @@ fn main() {
                 };
 
                 if let Some(w) = width {
-                    if w < img.width() {
+                    if let Some(h) = height {
+                        img = img.resize_to_fill(w, h, image::imageops::FilterType::Lanczos3);
+                    } else if w < img.width() {
                         img = img.resize(w, u32::MAX, image::imageops::FilterType::Lanczos3);
+                    }
+                } else if let Some(h) = height {
+                    if h < img.height() {
+                        img = img.resize(u32::MAX, h, image::imageops::FilterType::Lanczos3);
                     }
                 }
 
@@ -374,6 +387,7 @@ fn main() {
                 .route("/api/upload_raw", post(upload_raw_handler))
                 .route("/api/upload_media", post(upload_media_handler))
                 .route("/api/export_data", get(export_data_handler))
+                .nest("/api/oauth", api::oauth::oauth_router())
                 .route("/wallpaper/{id}/download", get(download_handler))
                 .layer(DefaultBodyLimit::disable());
             Ok(app)
@@ -388,6 +402,7 @@ fn App() -> Element {
     use_context_provider(|| Signal::new(false));
     use_context_provider(|| Signal::new(Vec::<Toast>::new()));
     use_context_provider(|| Signal::new(AuthState::Loading));
+    ui::init_i18n();
 
     rsx! {
         document::Title { "Wallr | Optimal Wallpaper Engine" }

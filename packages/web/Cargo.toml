@@ -22,6 +22,7 @@ lucide-dioxus = { version = "3.11.0", features = ["all-icons"] }
 gloo-timers = { version = "0.4.0", features = ["futures"] }
 tokio = { version = "1.0", features = ["fs", "rt", "macros"], optional = true }
 tokio-util = { version = "0.7", features = ["io"], optional = true }
+dotenvy = "0.15.7"
 
 [features]
 default = []

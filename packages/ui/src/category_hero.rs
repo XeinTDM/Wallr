@@ -21,6 +21,7 @@ pub struct CategoryHeroProps<R: Routable + Clone + PartialEq + 'static> {
 pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
     props: CategoryHeroProps<R>,
 ) -> Element {
+    let i18n = crate::i18n::use_i18n();
     let mut category = props.category;
     let mut resolution = props.resolution;
     let mut sort = props.sort;
@@ -52,7 +53,7 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                     p {
                         class: "category-breadcrumb",
                         style: "font-size: 14px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin-bottom: 12px;",
-                        Link { to: props.home_route.clone(), style: "color: var(--text-muted); text-decoration: none; transition: color 0.2s;", "Home" }
+                        Link { to: props.home_route.clone(), style: "color: var(--text-muted); text-decoration: none; transition: color 0.2s;", "{i18n.t(\"ch_home\")}" }
                         span { class: "mx-2", "/" }
                         span { "{props.breadcrumb}" }
                     }
@@ -69,14 +70,14 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                     div {
                         class: "filter-group",
                         style: "display: flex; flex-direction: column; gap: 8px;",
-                        label { r#for: "filter-category", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Category" }
+                        label { r#for: "filter-category", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_category\")}" }
                         select {
                             id: "filter-category",
                             class: "form-select",
                             style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                             onchange: move |e| category.set(e.value()),
                             value: "{category}",
-                            option { value: "", "All" }
+                            option { value: "", "{i18n.t(\"ch_all\")}" }
                             for (val, label) in api::tags::CATEGORIES.iter() {
                                 option { key: "{val}", value: "{val}", "{label}" }
                             }
@@ -85,14 +86,14 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                     div {
                         class: "filter-group",
                         style: "display: flex; flex-direction: column; gap: 8px;",
-                        label { r#for: "filter-resolution", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Resolution" }
+                        label { r#for: "filter-resolution", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_resolution\")}" }
                         select {
                             id: "filter-resolution",
                             class: "form-select",
                             style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                             onchange: move |e| resolution.set(e.value()),
                             value: "{resolution}",
-                            option { value: "", "All" }
+                            option { value: "", "{i18n.t(\"ch_all\")}" }
                             option { value: "hd", "HD" }
                             option { value: "4k", "4K" }
                             option { value: "8k", "8K" }
@@ -101,16 +102,16 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                     div {
                         class: "filter-group",
                         style: "display: flex; flex-direction: column; gap: 8px;",
-                        label { r#for: "filter-sort", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Sort by" }
+                        label { r#for: "filter-sort", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_sort_by\")}" }
                         select {
                             id: "filter-sort",
                             class: "form-select",
                             style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                             onchange: move |e| sort.set(e.value()),
                             value: "{sort}",
-                            option { value: "rating", "Rating" }
-                            option { value: "downloads", "Downloads" }
-                            option { value: "date", "Date" }
+                            option { value: "rating", "{i18n.t(\"ch_rating\")}" }
+                            option { value: "downloads", "{i18n.t(\"ch_downloads\")}" }
+                            option { value: "date", "{i18n.t(\"ch_date\")}" }
                         }
                     }
 
@@ -118,69 +119,69 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                         div {
                             class: "filter-group",
                             style: "display: flex; flex-direction: column; gap: 8px;",
-                            label { r#for: "filter-aspect", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Aspect Ratio" }
+                            label { r#for: "filter-aspect", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_aspect_ratio\")}" }
                             select {
                                 id: "filter-aspect",
                                 class: "form-select",
                                 style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                                 onchange: move |e| aspect_ratio.set(e.value()),
                                 value: "{aspect_ratio}",
-                                option { value: "", "All" }
-                                option { value: "ultrawide", "Ultrawide (21:9+)" }
-                                option { value: "desktop", "Desktop (16:9)" }
-                                option { value: "mobile", "Mobile (Portrait)" }
+                                option { value: "", "{i18n.t(\"ch_all\")}" }
+                                option { value: "ultrawide", "{i18n.t(\"ch_ultrawide\")}" }
+                                option { value: "desktop", "{i18n.t(\"ch_desktop\")}" }
+                                option { value: "mobile", "{i18n.t(\"ch_mobile\")}" }
                             }
                         }
                         div {
                             class: "filter-group",
                             style: "display: flex; flex-direction: column; gap: 8px;",
-                            label { r#for: "filter-color", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Color" }
+                            label { r#for: "filter-color", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_color\")}" }
                             select {
                                 id: "filter-color",
                                 class: "form-select",
                                 style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                                 onchange: move |e| color.set(e.value()),
                                 value: "{color}",
-                                option { value: "", "All" }
-                                option { value: "dark", "Dark" }
-                                option { value: "light", "Light" }
-                                option { value: "red", "Red" }
-                                option { value: "blue", "Blue" }
-                                option { value: "green", "Green" }
-                                option { value: "purple", "Purple" }
-                                option { value: "orange", "Orange" }
+                                option { value: "", "{i18n.t(\"ch_all\")}" }
+                                option { value: "dark", "{i18n.t(\"ch_color_dark\")}" }
+                                option { value: "light", "{i18n.t(\"ch_color_light\")}" }
+                                option { value: "red", "{i18n.t(\"ch_color_red\")}" }
+                                option { value: "blue", "{i18n.t(\"ch_color_blue\")}" }
+                                option { value: "green", "{i18n.t(\"ch_color_green\")}" }
+                                option { value: "purple", "{i18n.t(\"ch_color_purple\")}" }
+                                option { value: "orange", "{i18n.t(\"ch_color_orange\")}" }
                             }
                         }
                         div {
                             class: "filter-group",
                             style: "display: flex; flex-direction: column; gap: 8px;",
-                            label { r#for: "filter-ai", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "AI Filter" }
+                            label { r#for: "filter-ai", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_ai_filter\")}" }
                             select {
                                 id: "filter-ai",
                                 class: "form-select",
                                 style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                                 onchange: move |e| ai_filter.set(e.value()),
                                 value: "{ai_filter}",
-                                option { value: "", "All" }
-                                option { value: "hide", "Hide AI" }
-                                option { value: "only", "Only AI" }
+                                option { value: "", "{i18n.t(\"ch_all\")}" }
+                                option { value: "hide", "{i18n.t(\"ch_hide_ai\")}" }
+                                option { value: "only", "{i18n.t(\"ch_only_ai\")}" }
                             }
                         }
                         div {
                             class: "filter-group",
                             style: "display: flex; flex-direction: column; gap: 8px;",
-                            label { r#for: "filter-timeframe", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "Timeframe" }
+                            label { r#for: "filter-timeframe", style: "font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);", "{i18n.t(\"ch_timeframe\")}" }
                             select {
                                 id: "filter-timeframe",
                                 class: "form-select",
                                 style: "background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 16px; min-width: 160px; color: var(--text-primary); outline: none; cursor: pointer; transition: border-color 0.2s;",
                                 onchange: move |e| timeframe.set(e.value()),
                                 value: "{timeframe}",
-                                option { value: "", "All Time" }
-                                option { value: "today", "Past 24 Hours" }
-                                option { value: "week", "Past Week" }
-                                option { value: "month", "Past Month" }
-                                option { value: "year", "Past Year" }
+                                option { value: "", "{i18n.t(\"ch_all_time\")}" }
+                                option { value: "today", "{i18n.t(\"ch_past_24_hours\")}" }
+                                option { value: "week", "{i18n.t(\"ch_past_week\")}" }
+                                option { value: "month", "{i18n.t(\"ch_past_month\")}" }
+                                option { value: "year", "{i18n.t(\"ch_past_year\")}" }
                             }
                         }
                     }
@@ -189,7 +190,7 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                         style: "height: 42px; width: 42px; border-radius: 10px; border: 1px solid var(--border-color); margin-left: auto; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; background: {btn_bg}; color: {btn_color};",
                         class: "glow-hover",
                         onclick: move |_| show_advanced_filters.set(!is_showing_advanced),
-                        title: "Toggle Advanced Filters",
+                        title: "{i18n.t(\"ch_toggle_advanced\")}",
                         lucide_dioxus::SlidersHorizontal {
                             size: 20,
                             color: "currentColor",
