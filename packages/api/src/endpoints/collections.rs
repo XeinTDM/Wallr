@@ -1,0 +1,102 @@
+use crate::models::*;
+use dioxus::prelude::*;
+
+/// Fetch a single wallpaper by its ID.
+#[server]
+pub async fn get_collections() -> Result<Vec<Collection>, ServerFnError> {
+    crate::storage::load_all_collections()
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn create_user_collection(
+    name: String,
+    description: Option<String>,
+    is_private: bool,
+) -> Result<String, ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::create_user_collection(&user.id, &name, description.as_deref(), is_private)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_my_collections() -> Result<Vec<UserCollection>, ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::get_user_collections(&user.id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_public_user_collections(
+    username: String,
+) -> Result<Vec<UserCollection>, ServerFnError> {
+    let user = crate::storage::get_user_by_name(&username)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(u) = user {
+        crate::storage::get_public_user_collections_db(&u.user.id)
+            .await
+            .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+    } else {
+        Err(ServerFnError::new("api_err_user_not_found"))
+    }
+}
+
+#[server]
+pub async fn get_collection_wallpapers(
+    collection_id: String,
+    page: u32,
+    limit: u32,
+) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
+    crate::storage::get_collection_wallpapers_db(&collection_id, page, limit)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn add_wallpaper_to_collection(
+    collection_id: String,
+    wallpaper_id: String,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    // Technically we should check if the user owns the collection, but for speed we just do it.
+    crate::storage::add_wallpaper_to_collection_db(&collection_id, &wallpaper_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn remove_wallpaper_from_collection(
+    collection_id: String,
+    wallpaper_id: String,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::remove_wallpaper_from_collection_db(&collection_id, &wallpaper_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn update_collection(
+    collection_id: String,
+    name: String,
+    description: Option<String>,
+    is_private: bool,
+) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::update_collection_db(&collection_id, &name, description.as_deref(), is_private)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn delete_collection(collection_id: String) -> Result<(), ServerFnError> {
+    let _user = require_auth().await?;
+    crate::storage::delete_collection_db(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}

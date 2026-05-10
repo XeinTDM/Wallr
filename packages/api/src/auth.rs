@@ -1,0 +1,440 @@
+use dioxus::prelude::*;
+
+#[cfg(feature = "server")]
+fn extract_client_ip(
+    headers: &http::HeaderMap,
+    connect_info: Result<
+        axum::extract::ConnectInfo<std::net::SocketAddr>,
+        dioxus::prelude::ServerFnError,
+    >,
+) -> String {
+    let direct_ip = connect_info.map(|info| info.0.ip());
+
+    let allow_headers = match &direct_ip {
+        Ok(std::net::IpAddr::V4(ipv4)) => {
+            let octets = ipv4.octets();
+            let is_private = octets[0] == 10
+                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                || (octets[0] == 192 && octets[1] == 168);
+            is_private || ipv4.is_loopback() || ipv4.is_link_local()
+        }
+        Ok(std::net::IpAddr::V6(ipv6)) => ipv6.is_loopback(),
+        Err(_) => true,
+    };
+
+    if allow_headers {
+        if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+            if let Some(first_ip) = xff.split(',').next() {
+                let trimmed = first_ip.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+        if let Some(xrip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+            let trimmed = xrip.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    match direct_ip {
+        Ok(ip) => ip.to_string(),
+        Err(_) => "unknown_ip".to_string(),
+    }
+}
+
+#[cfg(feature = "server")]
+pub async fn require_auth() -> Result<User, dioxus::prelude::ServerFnError> {
+    use dioxus_fullstack::FullstackContext;
+    FullstackContext::extract::<User, _>()
+        .await
+        .map_err(|_| dioxus::prelude::ServerFnError::new("api_err_unauthorized"))
+}
+
+#[cfg(feature = "server")]
+pub async fn require_admin() -> Result<User, dioxus::prelude::ServerFnError> {
+    let user = require_auth().await?;
+    if user.role != "admin" && user.role != "super_admin" {
+        return Err(dioxus::prelude::ServerFnError::new(
+            "Forbidden: Admins only",
+        ));
+    }
+    Ok(user)
+}
+
+#[cfg(feature = "server")]
+impl<S> axum::extract::FromRequestParts<S> for User
+where
+    S: Send + Sync,
+{
+    type Rejection = (http::StatusCode, &'static str);
+
+    async fn from_request_parts(
+        parts: &mut http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        use axum_extra::extract::cookie::CookieJar;
+        let jar = CookieJar::from_headers(&parts.headers);
+        let token = jar.get("session_token").map(|c| c.value());
+
+        let token = match token {
+            Some(t) => t,
+            None => return Err((http::StatusCode::UNAUTHORIZED, "Missing session token")),
+        };
+
+        match crate::storage::verify_token(token).await {
+            Ok(user) => Ok(user),
+            Err(_) => Err((
+                http::StatusCode::UNAUTHORIZED,
+                "Invalid or expired session token",
+            )),
+        }
+    }
+}
+
+#[server]
+pub async fn login(email: String, password: String) -> Result<(), ServerFnError> {
+    use argon2::{Argon2, PasswordHash, PasswordVerifier};
+    use dioxus_fullstack::FullstackContext;
+
+    if password.len() < 8 || password.len() > 128 {
+        return Err(ServerFnError::new("api_err_invalid_login"));
+    }
+
+    let email = email.trim().to_lowercase();
+
+    let headers = FullstackContext::extract::<http::HeaderMap, _>()
+        .await
+        .map_err(|_| ServerFnError::new("api_err_unauthorized"))?;
+
+    let connect_info =
+        FullstackContext::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>, _>().await;
+    let ip = extract_client_ip(&headers, connect_info);
+
+    crate::storage::check_login_rate_limit(&ip, &email)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let user_record_opt = crate::storage::get_user_by_email(&email)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let is_valid = if let Some(user_record) = &user_record_opt {
+        let hash_clone = user_record.password_hash.clone();
+        let pass_clone = password.clone();
+        tokio::task::spawn_blocking(move || {
+            let parsed_hash =
+                PasswordHash::new(&hash_clone).map_err(|e| format!("Hash error: {}", e))?;
+            Ok::<bool, String>(
+                Argon2::default()
+                    .verify_password(pass_clone.as_bytes(), &parsed_hash)
+                    .is_ok(),
+            )
+        })
+        .await
+        .map_err(|_| ServerFnError::new("api_err_task"))?
+        .map_err(|e| ServerFnError::new(e))?
+    } else {
+        let pass_clone = password.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
+            let salt = SaltString::generate(&mut OsRng);
+            let _ = Argon2::default().hash_password(pass_clone.as_bytes(), &salt);
+        })
+        .await;
+        false
+    };
+
+    if is_valid {
+        if let Some(user_record) = user_record_opt {
+            if user_record.user.is_banned {
+                return Err(ServerFnError::new("api_err_account_banned"));
+            }
+
+            let token =
+                crate::storage::generate_token(&user_record.user, user_record.token_version)
+                    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+            if let Some(ctx) = FullstackContext::current() {
+                let cookie = format!(
+                    "session_token={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000",
+                    token
+                );
+                ctx.add_response_header(
+                    http::header::SET_COOKIE,
+                    cookie.parse::<http::header::HeaderValue>().unwrap(),
+                );
+            }
+
+            crate::storage::reset_login_rate_limit(&ip, &email).await;
+            return Ok(());
+        }
+    }
+
+    Err(ServerFnError::new("api_err_invalid_login"))
+}
+
+#[server]
+pub async fn register(name: String, email: String, password: String) -> Result<(), ServerFnError> {
+    use argon2::{
+        Argon2,
+        password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    };
+    use dioxus_fullstack::FullstackContext;
+    use sha2::{Digest, Sha256};
+    use uuid::Uuid;
+
+    if password.len() < 8 || password.len() > 128 {
+        return Err(ServerFnError::new(
+            "Password must be between 8 and 128 characters long",
+        ));
+    }
+
+    let email = email.trim().to_lowercase();
+
+    let headers = FullstackContext::extract::<http::HeaderMap, _>()
+        .await
+        .map_err(|_| ServerFnError::new("api_err_unauthorized"))?;
+
+    let connect_info =
+        FullstackContext::extract::<axum::extract::ConnectInfo<std::net::SocketAddr>, _>().await;
+    let ip = extract_client_ip(&headers, connect_info);
+
+    crate::storage::check_register_rate_limit(&ip)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let existing_user = crate::storage::get_user_by_email(&email)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if existing_user.is_some() {
+        return Err(ServerFnError::new("api_err_email_exists"));
+    }
+
+    let password_hash = tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map(|hash| hash.to_string())
+            .map_err(|e| format!("Hashing error: {}", e))
+    })
+    .await
+    .map_err(|_| ServerFnError::new("api_err_task"))?
+    .map_err(|e| ServerFnError::new(e))?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(email.as_bytes());
+    let email_hash = format!("{:x}", hasher.finalize());
+
+    let new_user = User {
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        email,
+        pfp_url: format!(
+            "https://api.dicebear.com/7.x/avataaars/svg?seed={}",
+            uuid::Uuid::new_v4().to_string()
+        ),
+        banner_url: None,
+        bio: None,
+        social_links: None,
+        role: "user".to_string(),
+        is_banned: false,
+        active_playlist_id: None,
+        playlist_interval_secs: 3600,
+    };
+
+    let record = UserRecord {
+        user: new_user.clone(),
+        password_hash,
+        token_version: 1,
+    };
+
+    crate::storage::create_user(&record)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let token = crate::storage::generate_token(&new_user, record.token_version)
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(ctx) = FullstackContext::current() {
+        let cookie = format!(
+            "session_token={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000",
+            token
+        );
+        ctx.add_response_header(
+            http::header::SET_COOKIE,
+            cookie.parse::<http::header::HeaderValue>().unwrap(),
+        );
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn logout() -> Result<(), ServerFnError> {
+    use dioxus_fullstack::FullstackContext;
+
+    if let Some(ctx) = FullstackContext::current() {
+        let cookie = "session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        ctx.add_response_header(
+            http::header::SET_COOKIE,
+            cookie.parse::<http::header::HeaderValue>().unwrap(),
+        );
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn change_password(
+    current_password: String,
+    new_password: String,
+) -> Result<(), ServerFnError> {
+    use argon2::{
+        Argon2, PasswordHash, PasswordVerifier,
+        password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    };
+    use dioxus_fullstack::FullstackContext;
+
+    if new_password.len() < 8 || new_password.len() > 128 {
+        return Err(ServerFnError::new(
+            "New password must be between 8 and 128 characters long",
+        ));
+    }
+
+    let user = require_auth().await?;
+    let user_record = crate::storage::get_user_by_id(&user.id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
+        .ok_or_else(|| ServerFnError::new("api_err_user_not_found"))?;
+
+    let hash_clone = user_record.password_hash.clone();
+    let is_valid = tokio::task::spawn_blocking(move || {
+        let parsed_hash =
+            PasswordHash::new(&hash_clone).map_err(|e| format!("Hash error: {}", e))?;
+        Ok::<bool, String>(
+            Argon2::default()
+                .verify_password(current_password.as_bytes(), &parsed_hash)
+                .is_ok(),
+        )
+    })
+    .await
+    .map_err(|_| ServerFnError::new("api_err_task"))?
+    .map_err(|e| ServerFnError::new(e))?;
+
+    if !is_valid {
+        return Err(ServerFnError::new("api_err_wrong_pwd"));
+    }
+
+    let new_password_hash = tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default()
+            .hash_password(new_password.as_bytes(), &salt)
+            .map(|hash| hash.to_string())
+            .map_err(|e| format!("Hashing error: {}", e))
+    })
+    .await
+    .map_err(|_| ServerFnError::new("api_err_task"))?
+    .map_err(|e| ServerFnError::new(e))?;
+
+    crate::storage::update_password(&user.id, &new_password_hash)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(ctx) = FullstackContext::current() {
+        let cookie = "session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        ctx.add_response_header(
+            http::header::SET_COOKIE,
+            cookie.parse::<http::header::HeaderValue>().unwrap(),
+        );
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn revoke_sessions() -> Result<(), ServerFnError> {
+    use dioxus_fullstack::FullstackContext;
+    let user = require_auth().await?;
+    crate::storage::revoke_all_sessions(&user.id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(ctx) = FullstackContext::current() {
+        let cookie = "session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        ctx.add_response_header(
+            http::header::SET_COOKIE,
+            cookie.parse::<http::header::HeaderValue>().unwrap(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "server")]
+pub async fn require_super_admin() -> Result<User, dioxus::prelude::ServerFnError> {
+    let user = require_auth().await?;
+    if user.role != "super_admin" {
+        return Err(dioxus::prelude::ServerFnError::new(
+            "Forbidden: Super Admins only",
+        ));
+    }
+    Ok(user)
+}
+
+#[cfg(feature = "server")]
+pub async fn require_moderator() -> Result<User, dioxus::prelude::ServerFnError> {
+    let user = require_auth().await?;
+    if user.role != "moderator" && user.role != "admin" && user.role != "super_admin" {
+        return Err(dioxus::prelude::ServerFnError::new(
+            "Forbidden: Moderators only",
+        ));
+    }
+    Ok(user)
+}
+
+#[server]
+pub async fn request_password_reset(email: String) -> Result<(), ServerFnError> {
+    let user_opt = crate::storage::get_user_by_email(&email)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(user_record) = user_opt {
+        let token = crate::storage::create_password_reset_token_db(&user_record.user.id)
+            .await
+            .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+        println!("----------------------------------------");
+        println!("PASSWORD RESET REQUESTED FOR: {}", email);
+        println!("Reset Link: http://localhost:8080/reset-password/{}", token);
+        println!("----------------------------------------");
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn reset_password_with_token(
+    token: String,
+    new_password: String,
+) -> Result<(), ServerFnError> {
+    let new_password_hash = tokio::task::spawn_blocking(move || {
+        use argon2::PasswordHasher;
+        let salt = argon2::password_hash::SaltString::generate(
+            &mut argon2::password_hash::rand_core::OsRng,
+        );
+        argon2::Argon2::default()
+            .hash_password(new_password.as_bytes(), &salt)
+            .map(|hash| hash.to_string())
+            .map_err(|e| format!("Hashing error: {}", e))
+    })
+    .await
+    .map_err(|_| ServerFnError::new("api_err_task"))?
+    .map_err(|e| ServerFnError::new(e))?;
+
+    crate::storage::consume_password_reset_token_db(&token, &new_password_hash)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}

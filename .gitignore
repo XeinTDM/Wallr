@@ -21,3 +21,4 @@ packages/web/assets/uploads/*
 !packages/web/assets/uploads/.gitkeep
 packages/desktop/.desktop/
 packages/desktop/.desktop_data/
+.gemini/

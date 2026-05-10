@@ -45,6 +45,8 @@ rustrict = { version = "0.7.38", optional = true }
 pgvector = { version = "0.3.2", features = ["sqlx"], optional = true }
 oauth2 = { version = "4.4", optional = true }
 img_hash = { version = "3.2", optional = true }
+bk-tree = "0.5.0"
+pdqhash = "0.1.1"
 
 [features]
 server = [
