@@ -37,7 +37,7 @@ pub async fn upload_raw_impl(
         let thumb_path = temp_dir.join(format!("{}_thumb.jpg", id));
         tokio::fs::write(&video_path, &bytes).await?;
 
-        let status = tokio::process::Command::new("ffmpeg")
+        let status_res = tokio::process::Command::new("ffmpeg")
             .arg("-i")
             .arg(&video_path)
             .arg("-vframes")
@@ -47,20 +47,31 @@ pub async fn upload_raw_impl(
             .arg("-y")
             .arg(&thumb_path)
             .status()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to run ffmpeg: {}", e))?;
+            .await;
+
+        let status = match status_res {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&video_path).await;
+                let _ = tokio::fs::remove_file(&thumb_path).await;
+                return Err(anyhow::anyhow!("Failed to run ffmpeg: {}", e));
+            }
+        };
 
         if !status.success() {
+            let _ = tokio::fs::remove_file(&video_path).await;
+            let _ = tokio::fs::remove_file(&thumb_path).await;
             return Err(anyhow::anyhow!("ffmpeg failed to extract frame"));
         }
 
-        let thumb_bytes = tokio::fs::read(&thumb_path).await?;
+        let thumb_bytes = tokio::fs::read(&thumb_path).await;
+        let _ = tokio::fs::remove_file(&video_path).await;
+        let _ = tokio::fs::remove_file(&thumb_path).await;
+
+        let thumb_bytes = thumb_bytes?;
         let img = tokio::task::spawn_blocking(move || ::image::load_from_memory(&thumb_bytes))
             .await?
             .map_err(|e| anyhow::anyhow!("Failed to decode thumbnail: {}", e))?;
-
-        let _ = tokio::fs::remove_file(video_path).await;
-        let _ = tokio::fs::remove_file(thumb_path).await;
 
         (img, image_url)
     } else {
@@ -200,6 +211,7 @@ pub async fn upload_raw_impl(
                         crate::storage::cache::get_wallpaper_cache()
                             .remove(&bg_id)
                             .await;
+                        crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
                     }
                 }
             });

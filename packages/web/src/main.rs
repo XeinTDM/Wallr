@@ -42,6 +42,10 @@ fn main() {
             use axum::body::Body;
             use axum::http::StatusCode;
 
+            if id.contains('.') || id.contains('/') || id.contains('\\') {
+                return (StatusCode::BAD_REQUEST, "Invalid ID".to_string()).into_response();
+            }
+
             let format = query
                 .format
                 .unwrap_or_else(|| "avif".to_string())
@@ -230,7 +234,7 @@ fn main() {
 
                 let mut out = std::io::Cursor::new(Vec::new());
                 let img_format = match format_str.as_str() {
-                    "jpeg" | "jpg" => image::ImageFormat::Jpeg,
+                    "jpeg" | "jpg" | "avif" => image::ImageFormat::Jpeg, // Fallback AVIF to JPEG since we can't encode AVIF natively
                     "png" => image::ImageFormat::Png,
                     _ => return Err("Unsupported format".to_string()),
                 };
