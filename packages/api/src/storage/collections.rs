@@ -8,7 +8,7 @@ pub async fn load_all_collections() -> anyhow::Result<Vec<crate::Collection>> {
     }
 
     let pool = get_pool()?;
-    let rows = sqlx::query!("SELECT * FROM collections ORDER BY name ASC")
+    let rows = sqlx::query!("SELECT id, name, item_count, cover_url FROM collections ORDER BY name ASC")
         .fetch_all(pool)
         .await?;
 
@@ -261,3 +261,4 @@ pub async fn delete_collection_db(collection_id: &str) -> anyhow::Result<()> {
 
     Ok(())
 }
+

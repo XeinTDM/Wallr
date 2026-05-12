@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn get_my_notifications() -> Result<Vec<Notification>, ServerFnError> {
@@ -24,3 +25,5 @@ pub async fn mark_all_notifications_read() -> Result<(), ServerFnError> {
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+

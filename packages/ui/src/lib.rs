@@ -1,3 +1,4 @@
+#![allow(clippy::redundant_pattern_matching, clippy::redundant_locals)]
 use dioxus::prelude::*;
 use std::collections::HashSet;
 

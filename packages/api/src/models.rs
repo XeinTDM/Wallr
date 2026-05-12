@@ -131,3 +131,16 @@ pub struct UserRecord {
     pub password_hash: String,
     pub token_version: i32,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DmcaClaim {
+    pub id: String,
+    pub wallpaper_id: String,
+    pub claimant_name: String,
+    pub claimant_email: String,
+    pub original_url: Option<String>,
+    pub description: String,
+    pub digital_signature: String,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}

@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use crate::models::{User, UserRecord};
 
 #[cfg(feature = "server")]
 fn extract_client_ip(
@@ -23,14 +24,13 @@ fn extract_client_ip(
     };
 
     if allow_headers {
-        if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-            if let Some(first_ip) = xff.split(',').next() {
+        if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
+            && let Some(first_ip) = xff.split(',').next() {
                 let trimmed = first_ip.trim();
                 if !trimmed.is_empty() {
                     return trimmed.to_string();
                 }
             }
-        }
         if let Some(xrip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
             let trimmed = xrip.trim();
             if !trimmed.is_empty() {
@@ -135,7 +135,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
         })
         .await
         .map_err(|_| ServerFnError::new("api_err_task"))?
-        .map_err(|e| ServerFnError::new(e))?
+        .map_err(ServerFnError::new)?
     } else {
         let pass_clone = password.clone();
         let _ = tokio::task::spawn_blocking(move || {
@@ -147,8 +147,8 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
         false
     };
 
-    if is_valid {
-        if let Some(user_record) = user_record_opt {
+    if is_valid
+        && let Some(user_record) = user_record_opt {
             if user_record.user.is_banned {
                 return Err(ServerFnError::new("api_err_account_banned"));
             }
@@ -171,7 +171,6 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
             crate::storage::reset_login_rate_limit(&ip, &email).await;
             return Ok(());
         }
-    }
 
     Err(ServerFnError::new("api_err_invalid_login"))
 }
@@ -184,7 +183,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
     };
     use dioxus_fullstack::FullstackContext;
     use sha2::{Digest, Sha256};
-    use uuid::Uuid;
+    
 
     if password.len() < 8 || password.len() > 128 {
         return Err(ServerFnError::new(
@@ -214,6 +213,14 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
         return Err(ServerFnError::new("api_err_email_exists"));
     }
 
+    let existing_name = crate::storage::get_user_by_name(&name)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if existing_name.is_some() {
+        return Err(ServerFnError::new("api_err_username_exists"));
+    }
+
     let password_hash = tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
@@ -223,11 +230,11 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
     })
     .await
     .map_err(|_| ServerFnError::new("api_err_task"))?
-    .map_err(|e| ServerFnError::new(e))?;
+    .map_err(ServerFnError::new)?;
 
     let mut hasher = Sha256::new();
     hasher.update(email.as_bytes());
-    let email_hash = format!("{:x}", hasher.finalize());
+    let _email_hash = format!("{:x}", hasher.finalize());
 
     let new_user = User {
         id: uuid::Uuid::new_v4().to_string(),
@@ -235,7 +242,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
         email,
         pfp_url: format!(
             "https://api.dicebear.com/7.x/avataaars/svg?seed={}",
-            uuid::Uuid::new_v4().to_string()
+            uuid::Uuid::new_v4()
         ),
         banner_url: None,
         bio: None,
@@ -323,7 +330,7 @@ pub async fn change_password(
     })
     .await
     .map_err(|_| ServerFnError::new("api_err_task"))?
-    .map_err(|e| ServerFnError::new(e))?;
+    .map_err(ServerFnError::new)?;
 
     if !is_valid {
         return Err(ServerFnError::new("api_err_wrong_pwd"));
@@ -338,7 +345,7 @@ pub async fn change_password(
     })
     .await
     .map_err(|_| ServerFnError::new("api_err_task"))?
-    .map_err(|e| ServerFnError::new(e))?;
+    .map_err(ServerFnError::new)?;
 
     crate::storage::update_password(&user.id, &new_password_hash)
         .await
@@ -432,7 +439,7 @@ pub async fn reset_password_with_token(
     })
     .await
     .map_err(|_| ServerFnError::new("api_err_task"))?
-    .map_err(|e| ServerFnError::new(e))?;
+    .map_err(ServerFnError::new)?;
 
     crate::storage::consume_password_reset_token_db(&token, &new_password_hash)
         .await

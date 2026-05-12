@@ -1,5 +1,6 @@
 use crate::storage::get_pool;
 use crate::Wallpaper;
+use crate::storage::cache::get_wallpaper_cache;
 
 pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     use sqlx::Row;
@@ -60,7 +61,7 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
             downloads = EXCLUDED.downloads,
             is_private = EXCLUDED.is_private,
             is_live = EXCLUDED.is_live,
-            embedding = EXCLUDED.embedding,
+            embedding = COALESCE(EXCLUDED.embedding, wallpapers.embedding),
             phash = EXCLUDED.phash
         "#,
         wallpaper.id,
@@ -96,7 +97,7 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
     }
 
     let pool = get_pool()?;
-    let row = sqlx::query!(r#"SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1"#, id)
+    let row = sqlx::query!(r#"SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1"#, id)
         .fetch_optional(pool)
         .await?;
 
@@ -154,7 +155,7 @@ pub async fn delete_wallpaper(id: &str) -> anyhow::Result<()> {
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query!("DELETE FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1", id)
+    sqlx::query!("DELETE FROM wallpapers WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
 
@@ -196,13 +197,6 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
 
         crate::storage::cache::get_wallpaper_cache()
             .remove(wallpaper_id)
-            .await;
-        crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
-    }
-
-    Ok(())
-}
-r_id)
             .await;
         crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
     }

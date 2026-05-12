@@ -159,6 +159,16 @@ pub async fn update_profile(
     .await?;
 
     get_user_cache().remove(user_id).await;
+
+    let wp_ids: Vec<String> = sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author_id = $1", user_id)
+        .fetch_all(pool)
+        .await?;
+    let wp_cache = crate::storage::cache::get_wallpaper_cache();
+    for id in wp_ids {
+        wp_cache.remove(&id).await;
+    }
+    crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
+
     Ok(())
 }
 
@@ -171,7 +181,7 @@ pub async fn delete_user(user_id: &str) -> anyhow::Result<()> {
         .fetch_optional(&mut *tx)
         .await?;
 
-    if let Some(u) = user {
+    if let Some(_u) = user {
         let wp_ids: Vec<String> =
             sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author_id = $1", user_id)
                 .fetch_all(&mut *tx)

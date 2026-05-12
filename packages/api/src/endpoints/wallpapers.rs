@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 /// Fetch a list of trending wallpapers from the server.
 #[server]
@@ -141,3 +142,5 @@ pub async fn get_similar_wallpapers(
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+

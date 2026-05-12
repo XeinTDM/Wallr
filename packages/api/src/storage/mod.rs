@@ -13,7 +13,9 @@ pub use collections::*;
 pub use comments::*;
 pub use files::*;
 pub use notifications::*;
+#[allow(ambiguous_glob_reexports)]
 pub use users::*;
+#[allow(ambiguous_glob_reexports)]
 pub use wallpapers::*;
 
 use sqlx::{PgPool, postgres::PgPoolOptions};

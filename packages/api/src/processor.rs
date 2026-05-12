@@ -1,7 +1,6 @@
 use fast_image_resize as fr;
 use image::DynamicImage;
 use ravif::Encoder;
-use std::num::NonZeroU32;
 
 /// Convert a DynamicImage to AVIF format for master storage.
 pub fn convert_to_avif(img: &DynamicImage) -> anyhow::Result<Vec<u8>> {
@@ -114,7 +113,7 @@ pub fn extract_dominant_colors(img: &DynamicImage) -> Vec<String> {
     for &a in &assignments {
         cluster_counts[a].1 += 1;
     }
-    cluster_counts.sort_by(|a, b| b.1.cmp(&a.1));
+    cluster_counts.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     cluster_counts
         .into_iter()

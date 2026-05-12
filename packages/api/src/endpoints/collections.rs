@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 /// Fetch a single wallpaper by its ID.
 #[server]
@@ -62,7 +63,7 @@ pub async fn add_wallpaper_to_collection(
     collection_id: String,
     wallpaper_id: String,
 ) -> Result<(), ServerFnError> {
-    let user = require_auth().await?;
+    let _user = require_auth().await?;
     // Technically we should check if the user owns the collection, but for speed we just do it.
     crate::storage::add_wallpaper_to_collection_db(&collection_id, &wallpaper_id)
         .await
@@ -74,7 +75,7 @@ pub async fn remove_wallpaper_from_collection(
     collection_id: String,
     wallpaper_id: String,
 ) -> Result<(), ServerFnError> {
-    let user = require_auth().await?;
+    let _user = require_auth().await?;
     crate::storage::remove_wallpaper_from_collection_db(&collection_id, &wallpaper_id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -100,3 +101,5 @@ pub async fn delete_collection(collection_id: String) -> Result<(), ServerFnErro
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+

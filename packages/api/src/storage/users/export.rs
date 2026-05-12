@@ -68,25 +68,22 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
                 }
             }
 
-            if pfp_url.starts_with("/assets/uploads/") {
-                if let Some(filename) = pfp_url.split('/').last() {
+            if pfp_url.starts_with("/assets/uploads/")
+                && let Some(filename) = pfp_url.split('/').next_back() {
                     let path = storage_path.join(filename);
                     if let Ok(mut file) = std::fs::File::open(&path) {
                         let _ = tar.append_file(format!("profile/{}", filename), &mut file);
                     }
                 }
-            }
 
-            if let Some(banner_str) = &banner_url {
-                if banner_str.starts_with("/assets/uploads/") {
-                    if let Some(filename) = banner_str.split('/').last() {
+            if let Some(banner_str) = &banner_url
+                && banner_str.starts_with("/assets/uploads/")
+                    && let Some(filename) = banner_str.split('/').next_back() {
                         let path = storage_path.join(filename);
                         if let Ok(mut file) = std::fs::File::open(&path) {
                             let _ = tar.append_file(format!("profile/{}", filename), &mut file);
                         }
                     }
-                }
-            }
 
             tar.finish()?;
         }

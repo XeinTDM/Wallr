@@ -1,5 +1,6 @@
 use crate::storage::get_pool;
 use crate::Wallpaper;
+use crate::storage::cache::get_wallpaper_list_cache;
 
 pub async fn get_trending_tags(limit: u32) -> anyhow::Result<Vec<String>> {
     let cache = crate::storage::cache::get_trending_tags_cache();
@@ -47,9 +48,9 @@ pub async fn get_user_uploads(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
         WHERE u.name = $1
-        ORDER BY created_at DESC
+        ORDER BY w.created_at DESC
         LIMIT $2 OFFSET $3
         "#,
         author_name,
@@ -101,9 +102,9 @@ pub async fn get_public_uploads(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
         WHERE u.name = $1 AND is_private = false
-        ORDER BY created_at DESC
+        ORDER BY w.created_at DESC
         LIMIT $2 OFFSET $3
         "#,
         author_name,
@@ -183,4 +184,12 @@ pub async fn get_admin_stats_db() -> anyhow::Result<crate::AdminStats> {
         total_downloads: w_stats.total_downloads.unwrap_or(0) as u32,
         total_likes: w_stats.total_likes.unwrap_or(0) as u32,
     })
+}
+
+pub async fn refresh_trending_tags_view() -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!("REFRESH MATERIALIZED VIEW CONCURRENTLY trending_tags")
+        .execute(pool)
+        .await?;
+    Ok(())
 }

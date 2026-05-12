@@ -57,7 +57,7 @@ pub async fn get_recent_users_db(limit: u32) -> anyhow::Result<Vec<crate::User>>
     let limit = limit as i64;
 
     let rows = sqlx::query!(
-        "SELECT * FROM users ORDER BY created_at DESC LIMIT $1",
+        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs FROM users ORDER BY created_at DESC LIMIT $1",
         limit
     )
     .fetch_all(pool)

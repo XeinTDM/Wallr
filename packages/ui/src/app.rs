@@ -3,6 +3,7 @@ use crate::{DropdownSection, ExploreDropdown, Navbar};
 use dioxus::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum AuthState {
     Loading,
     Authenticated(api::User),

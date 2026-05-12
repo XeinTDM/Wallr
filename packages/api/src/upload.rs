@@ -1,5 +1,4 @@
 use crate::models::*;
-use dioxus::prelude::*;
 
 #[cfg(feature = "server")]
 pub async fn upload_raw_impl(
@@ -160,28 +159,22 @@ pub async fn upload_raw_impl(
         if !tags.contains(&"2k".to_string()) {
             tags.push("2k".to_string());
         }
-    } else if width >= 1920 && height >= 1080 {
-        if !tags.contains(&"hd".to_string()) {
+    } else if width >= 1920 && height >= 1080
+        && !tags.contains(&"hd".to_string()) {
             tags.push("hd".to_string());
         }
-    }
 
     let mut final_image_url = image_url;
     let mut final_size_bytes = original_bytes_len;
 
-    if !is_live {
-        if let Some(img) = img_opt {
+    if !is_live
+        && let Some(img) = img_opt {
             let bg_id = id.clone();
-            let avif_result = tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img)).await;
-            if let Ok(Ok(avif_data)) = avif_result {
-                let avif_url = crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data).unwrap_or_default();
-                if !avif_url.is_empty() {
-                    final_image_url = avif_url;
-                    final_size_bytes = avif_data.len() as u64;
-                }
-            }
+            let avif_data = tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img)).await??;
+            let avif_url = crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data)?;
+            final_image_url = avif_url;
+            final_size_bytes = avif_data.len() as u64;
         }
-    }
 
     let wallpaper = Wallpaper {
         id: id.clone(),

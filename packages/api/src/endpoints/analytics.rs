@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn get_creator_analytics() -> Result<CreatorAnalytics, ServerFnError> {
@@ -9,3 +10,5 @@ pub async fn get_creator_analytics() -> Result<CreatorAnalytics, ServerFnError> 
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+

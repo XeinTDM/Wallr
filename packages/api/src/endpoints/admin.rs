@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn admin_delete_wallpaper(
@@ -167,3 +168,42 @@ pub async fn update_user_role(user_id: String, new_role: String) -> Result<(), S
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+#[server]
+pub async fn submit_dmca_claim(
+    wallpaper_id: String,
+    claimant_name: String,
+    claimant_email: String,
+    original_url: Option<String>,
+    description: String,
+    digital_signature: String,
+) -> Result<(), ServerFnError> {
+    crate::storage::submit_dmca_claim_db(
+        &wallpaper_id,
+        &claimant_name,
+        &claimant_email,
+        original_url.as_deref(),
+        &description,
+        &digital_signature,
+    )
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_dmca_claims(status: Option<String>) -> Result<Vec<DmcaClaim>, ServerFnError> {
+    let _admin = require_moderator().await?;
+    crate::storage::get_dmca_claims_db(status.as_deref())
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn resolve_dmca_claim(claim_id: String, action: String) -> Result<(), ServerFnError> {
+    let admin = require_moderator().await?;
+    crate::storage::resolve_dmca_claim_db(&claim_id, &action, &admin.id, &admin.name)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+

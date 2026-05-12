@@ -304,7 +304,7 @@ pub fn render_profile_tab(
     label: &str,
     count: Option<u32>,
     active: bool,
-    mut onclick: impl FnMut(Event<dioxus::html::MouseData>) + 'static,
+    onclick: impl FnMut(Event<dioxus::html::MouseData>) + 'static,
 ) -> Element {
     rsx! {
         div {

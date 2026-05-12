@@ -67,10 +67,10 @@ fn get_client(provider: &str) -> Option<BasicClient> {
 async fn oauth_login(Path(provider): Path<String>) -> impl IntoResponse {
     let client = match get_client(&provider) {
         Some(c) => c,
-        None => return Redirect::to("/login?error=unsupported_provider"),
+        None => return Redirect::to("/login?error=unsupported_provider").into_response(),
     };
 
-    let (auth_url, _csrf_token) = client
+    let (auth_url, csrf_token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new(match provider.as_str() {
             "google" => "email profile".to_string(),
@@ -80,7 +80,17 @@ async fn oauth_login(Path(provider): Path<String>) -> impl IntoResponse {
         }))
         .url();
 
-    Redirect::to(auth_url.as_ref())
+    let cookie = format!(
+        "oauth_csrf={}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600",
+        csrf_token.secret()
+    );
+
+    let mut response = Redirect::to(auth_url.as_ref()).into_response();
+    response
+        .headers_mut()
+        .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+
+    response
 }
 
 #[derive(Deserialize)]
@@ -137,7 +147,7 @@ async fn oauth_callback(
     };
 
     let req_client = reqwest::Client::new();
-    let mut req = req_client
+    let req = req_client
         .get(user_info_url)
         .bearer_auth(token.access_token().secret())
         .header("User-Agent", "Wallr");
@@ -235,7 +245,7 @@ async fn oauth_callback(
         .await
         .unwrap_or(None);
 
-    let user = if let Some(mut existing_user) = user_record {
+    let user = if let Some(existing_user) = user_record {
         crate::storage::link_oauth_account(&existing_user.user.id, &provider, &provider_id)
             .await
             .ok();
@@ -269,7 +279,7 @@ async fn oauth_callback(
             token_version: 1,
         };
 
-        if let Err(_) = crate::storage::create_user(&record).await {
+        if crate::storage::create_user(&record).await.is_err() {
             return Redirect::to("/login?error=create_user_failed").into_response();
         }
 
@@ -280,10 +290,10 @@ async fn oauth_callback(
         new_user
     };
 
-    let record = crate::storage::get_user_by_email(&user.email)
-        .await
-        .unwrap_or(None)
-        .unwrap();
+    let record = match crate::storage::get_user_by_email(&user.email).await.unwrap_or(None) {
+        Some(r) => r,
+        None => return Redirect::to("/login?error=user_not_found").into_response(),
+    };
     let token = match crate::storage::generate_token(&record.user, record.token_version) {
         Ok(t) => t,
         Err(_) => return Redirect::to("/login?error=token_generation_failed").into_response(),

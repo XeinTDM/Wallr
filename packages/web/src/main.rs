@@ -52,7 +52,6 @@ fn main() {
                 .to_lowercase();
             let width = query.width;
             let height = query.height;
-            let _crop = query.crop;
 
             let source_path = if format == "avif" && width.is_none() {
                 format!("packages/ui/assets/uploads/{}_master.avif", id)
@@ -455,11 +454,7 @@ fn main() {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
                     loop {
                         interval.tick().await;
-                        if let Ok(pool) = api::storage::get_pool() {
-                            let _ = sqlx::query!("REFRESH MATERIALIZED VIEW CONCURRENTLY trending_tags")
-                                .execute(pool)
-                                .await;
-                        }
+                        let _ = api::storage::refresh_trending_tags_view().await;
                     }
                 });
             }

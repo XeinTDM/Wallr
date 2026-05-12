@@ -1,20 +1,21 @@
 use crate::storage::get_pool;
 use crate::Wallpaper;
 use super::core::map_wallpaper_row;
+use crate::storage::cache::get_wallpaper_list_cache;
 
 fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate::FilterOptions) {
-    q.push(" AND is_private = false");
+    q.push(" AND w.is_private = false");
 
     if !filters.resolution.is_empty() {
         match filters.resolution.as_str() {
             "4k" => {
-                q.push(" AND width >= 3840 AND height >= 2160");
+                q.push(" AND w.width >= 3840 AND w.height >= 2160");
             }
             "8k" => {
-                q.push(" AND width >= 7680 AND height >= 4320");
+                q.push(" AND w.width >= 7680 AND w.height >= 4320");
             }
             "hd" => {
-                q.push(" AND width >= 1920 AND height >= 1080");
+                q.push(" AND w.width >= 1920 AND w.height >= 1080");
             }
             _ => {}
         }
@@ -22,28 +23,28 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
     if !filters.aspect_ratio.is_empty() {
         match filters.aspect_ratio.as_str() {
             "ultrawide" => {
-                q.push(" AND (width::float / height::float) >= 2.3");
+                q.push(" AND (w.width::float / w.height::float) >= 2.3");
             }
             "desktop" => {
-                q.push(" AND (width::float / height::float) >= 1.3 AND (width::float / height::float) < 2.3");
+                q.push(" AND (w.width::float / w.height::float) >= 1.3 AND (w.width::float / w.height::float) < 2.3");
             }
             "mobile" => {
-                q.push(" AND (width::float / height::float) < 1.0");
+                q.push(" AND (w.width::float / w.height::float) < 1.0");
             }
             _ => {}
         }
     }
     if !filters.color.is_empty() {
-        q.push(" AND primary_colors ? ");
+        q.push(" AND w.primary_colors ? ");
         q.push_bind(filters.color.clone());
     }
     if !filters.ai_filter.is_empty() {
         match filters.ai_filter.as_str() {
             "hide" => {
-                q.push(" AND NOT (tags @> '[\"ai\"]')");
+                q.push(" AND NOT (w.tags @> '[\"ai\"]')");
             }
             "only" => {
-                q.push(" AND tags @> '[\"ai\"]'");
+                q.push(" AND w.tags @> '[\"ai\"]'");
             }
             _ => {}
         }
@@ -51,16 +52,16 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
     if !filters.timeframe.is_empty() {
         match filters.timeframe.as_str() {
             "daily" => {
-                q.push(" AND created_at >= NOW() - INTERVAL '1 day'");
+                q.push(" AND w.created_at >= NOW() - INTERVAL '1 day'");
             }
             "weekly" => {
-                q.push(" AND created_at >= NOW() - INTERVAL '7 days'");
+                q.push(" AND w.created_at >= NOW() - INTERVAL '7 days'");
             }
             "monthly" => {
-                q.push(" AND created_at >= NOW() - INTERVAL '30 days'");
+                q.push(" AND w.created_at >= NOW() - INTERVAL '30 days'");
             }
             "yearly" => {
-                q.push(" AND created_at >= NOW() - INTERVAL '1 year'");
+                q.push(" AND w.created_at >= NOW() - INTERVAL '1 year'");
             }
             _ => {}
         }
@@ -91,7 +92,7 @@ pub async fn load_all_wallpapers(
     }
 
     let pool = get_pool()?;
-    let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE 1=1");
+    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1");
     apply_filters(&mut q, &filters);
 
     let mut use_offset = false;
@@ -104,7 +105,7 @@ pub async fn load_all_wallpapers(
             match filters.sort.as_str() {
                 "downloads" => {
                     let downloads: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (downloads, id) <= (");
+                    q.push(" AND (w.downloads, w.id) < (");
                     q.push_bind(downloads);
                     q.push(", ");
                     q.push_bind(id.to_string());
@@ -112,15 +113,15 @@ pub async fn load_all_wallpapers(
                 }
                 "rating" => {
                     let likes: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (likes, id) <= (");
+                    q.push(" AND (w.likes, w.id) < (");
                     q.push_bind(likes);
                     q.push(", ");
                     q.push_bind(id.to_string());
                     q.push(")");
                 }
-                "date" | _ => {
+                _ => {
                     if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
-                        q.push(" AND (created_at, id) <= (");
+                        q.push(" AND (w.created_at, w.id) < (");
                         q.push_bind(date.with_timezone(&chrono::Utc));
                         q.push(", ");
                         q.push_bind(id.to_string());
@@ -135,13 +136,13 @@ pub async fn load_all_wallpapers(
 
     match filters.sort.as_str() {
         "downloads" => {
-            q.push(" ORDER BY downloads DESC, id DESC");
+            q.push(" ORDER BY w.downloads DESC, w.id DESC");
         }
         "rating" => {
-            q.push(" ORDER BY likes DESC, id DESC");
+            q.push(" ORDER BY w.likes DESC, w.id DESC");
         }
-        "date" | _ => {
-            q.push(" ORDER BY created_at DESC, id DESC");
+        _ => {
+            q.push(" ORDER BY w.created_at DESC, w.id DESC");
         }
     }
 
@@ -167,7 +168,7 @@ pub async fn load_all_wallpapers(
                 "rating" => {
                     next_cursor = Some(format!("{},{}", last.likes, last.id));
                 }
-                "date" | _ => {
+                _ => {
                     next_cursor = Some(format!("{},{}", last.created_at.to_rfc3339(), last.id));
                 }
             }
@@ -212,7 +213,7 @@ pub async fn get_wallpapers_by_tag(
     let pool = get_pool()?;
     let tag_json = serde_json::json!(tag);
 
-    let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE tags @> ");
+    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.tags @> ");
     q.push_bind(tag_json);
     apply_filters(&mut q, &filters);
 
@@ -226,7 +227,7 @@ pub async fn get_wallpapers_by_tag(
             match filters.sort.as_str() {
                 "downloads" => {
                     let downloads: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (downloads, id) <= (");
+                    q.push(" AND (w.downloads, w.id) < (");
                     q.push_bind(downloads);
                     q.push(", ");
                     q.push_bind(id.to_string());
@@ -234,15 +235,15 @@ pub async fn get_wallpapers_by_tag(
                 }
                 "rating" => {
                     let likes: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (likes, id) <= (");
+                    q.push(" AND (w.likes, w.id) < (");
                     q.push_bind(likes);
                     q.push(", ");
                     q.push_bind(id.to_string());
                     q.push(")");
                 }
-                "date" | _ => {
+                _ => {
                     if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
-                        q.push(" AND (created_at, id) <= (");
+                        q.push(" AND (w.created_at, w.id) < (");
                         q.push_bind(date.with_timezone(&chrono::Utc));
                         q.push(", ");
                         q.push_bind(id.to_string());
@@ -257,13 +258,13 @@ pub async fn get_wallpapers_by_tag(
 
     match filters.sort.as_str() {
         "downloads" => {
-            q.push(" ORDER BY downloads DESC, id DESC");
+            q.push(" ORDER BY w.downloads DESC, w.id DESC");
         }
         "rating" => {
-            q.push(" ORDER BY likes DESC, id DESC");
+            q.push(" ORDER BY w.likes DESC, w.id DESC");
         }
-        "date" | _ => {
-            q.push(" ORDER BY created_at DESC, id DESC");
+        _ => {
+            q.push(" ORDER BY w.created_at DESC, w.id DESC");
         }
     }
 
@@ -290,7 +291,7 @@ pub async fn get_wallpapers_by_tag(
                 "rating" => {
                     next_cursor = Some(format!("{},{}", last.likes, last.id));
                 }
-                "date" | _ => {
+                _ => {
                     next_cursor = Some(format!("{},{}", last.created_at.to_rfc3339(), last.id));
                 }
             }
@@ -324,18 +325,16 @@ pub async fn search_wallpapers_db(
     let offset = page * limit;
 
     let mut embed_opt = None;
-    if !query.is_empty() {
-        if let Some(tagger) = crate::ai::TAGGER.get() {
-            if let Ok(embed) = tagger.get_text_embedding(query) {
+    if !query.is_empty()
+        && let Some(tagger) = crate::ai::TAGGER.get()
+            && let Ok(embed) = tagger.get_text_embedding(query) {
                 embed_opt = Some(pgvector::Vector::from(embed));
             }
-        }
-    }
 
-    let mut q = sqlx::QueryBuilder::new("SELECT * FROM wallpapers WHERE 1=1");
+    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1");
 
     if embed_opt.is_none() && !query.is_empty() {
-        q.push(" AND search_vector @@ websearch_to_tsquery('english', ");
+        q.push(" AND w.search_vector @@ websearch_to_tsquery('english', ");
         q.push_bind(query);
         q.push(")");
     }
@@ -348,22 +347,22 @@ pub async fn search_wallpapers_db(
     } else if !query.is_empty() {
         match filters.sort.as_str() {
             "downloads" => {
-                q.push(" ORDER BY downloads DESC, ts_rank(search_vector, websearch_to_tsquery('english', ");
+                q.push(" ORDER BY w.downloads DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ");
                 q.push_bind(query);
                 q.push(")) DESC");
             }
             "rating" => {
                 q.push(
-                    " ORDER BY likes DESC, ts_rank(search_vector, websearch_to_tsquery('english', ",
+                    " ORDER BY w.likes DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ",
                 );
                 q.push_bind(query);
                 q.push(")) DESC");
             }
             "date" => {
-                q.push(" ORDER BY created_at DESC");
+                q.push(" ORDER BY w.created_at DESC");
             }
             _ => {
-                q.push(" ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', ");
+                q.push(" ORDER BY ts_rank(w.search_vector, websearch_to_tsquery('english', ");
                 q.push_bind(query);
                 q.push(")) DESC");
             }
@@ -371,13 +370,13 @@ pub async fn search_wallpapers_db(
     } else {
         match filters.sort.as_str() {
             "downloads" => {
-                q.push(" ORDER BY downloads DESC");
+                q.push(" ORDER BY w.downloads DESC");
             }
             "rating" => {
-                q.push(" ORDER BY likes DESC");
+                q.push(" ORDER BY w.likes DESC");
             }
-            "date" | _ => {
-                q.push(" ORDER BY created_at DESC");
+            _ => {
+                q.push(" ORDER BY w.created_at DESC");
             }
         }
     }
@@ -454,7 +453,7 @@ pub async fn get_similar_wallpapers_db(
 
         let visual_rows = sqlx::query!(
             r#"
-            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live 
+            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live 
             FROM wallpapers w
             JOIN users u ON w.author_id = u.id
             WHERE w.id != $1 AND w.is_private = false
@@ -515,16 +514,6 @@ pub async fn get_similar_wallpapers_db(
                     is_live: r.is_live,
                     embedding: None,
                     phash: None,
-                });
-            }
-        }
-
-        results.truncate(limit as usize);
-        return Ok(std::sync::Arc::new(results));
-    }
-
-    Ok(std::sync::Arc::new(vec![]))
-}
                 });
             }
         }

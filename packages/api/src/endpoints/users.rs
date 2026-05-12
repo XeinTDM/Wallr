@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn get_current_user() -> Result<Option<User>, ServerFnError> {
@@ -30,13 +31,22 @@ pub async fn update_profile(
     let existing_user = crate::storage::get_user_by_email(&email)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
-    if let Some(record) = existing_user {
-        if record.user.id != user.id {
+    if let Some(record) = existing_user
+        && record.user.id != user.id {
             return Err(ServerFnError::new(
                 "Email already in use by another account",
             ));
         }
-    }
+
+    let existing_name = crate::storage::get_user_by_name(&name)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    if let Some(record) = existing_name
+        && record.user.id != user.id {
+            return Err(ServerFnError::new(
+                "api_err_username_exists",
+            ));
+        }
 
     let socials_val =
         social_links.map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null));
@@ -127,7 +137,7 @@ pub async fn set_active_playlist(
     let user = require_auth().await?;
     crate::storage::users::update_user_playlist(&user.id, collection_id.as_deref(), interval_secs)
         .await
-        .map_err(|e| ServerFnError::new(e))?;
+        .map_err(ServerFnError::new)?;
     Ok(())
 }
 
@@ -136,7 +146,7 @@ pub async fn get_active_playlist_items() -> Result<(Vec<Wallpaper>, i32), Server
     let user = require_auth().await?;
     let db_user = crate::storage::users::get_user_by_id(&user.id)
         .await
-        .map_err(|e| ServerFnError::new(e))?;
+        .map_err(ServerFnError::new)?;
     
     let db_user = db_user.ok_or_else(|| ServerFnError::new("User not found"))?;
     let interval = db_user.user.playlist_interval_secs;
@@ -144,9 +154,11 @@ pub async fn get_active_playlist_items() -> Result<(Vec<Wallpaper>, i32), Server
     if let Some(col_id) = db_user.user.active_playlist_id {
         let items = crate::storage::collections::get_collection_wallpapers_db(&col_id, 0, 100)
             .await
-            .map_err(|e| ServerFnError::new(e))?;
+            .map_err(ServerFnError::new)?;
         Ok((items.to_vec(), interval))
     } else {
         Ok((vec![], interval))
     }
 }
+
+

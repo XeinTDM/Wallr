@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn get_wallpaper_comments(
@@ -85,3 +86,5 @@ pub async fn delete_comment(comment_id: String) -> Result<(), ServerFnError> {
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+

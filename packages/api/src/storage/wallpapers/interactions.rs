@@ -134,10 +134,10 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
             .await;
         crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 
-        if let Ok(Some(wp)) = get_wallpaper_by_id(wallpaper_id).await {
-            if let Ok(Some(author_record)) = crate::storage::users::get_user_by_id(&wp.author_id).await {
-                if let Ok(Some(liker)) = crate::storage::users::get_user_by_id(user_id).await {
-                    if author_record.user.id != user_id {
+        if let Ok(Some(wp)) = get_wallpaper_by_id(wallpaper_id).await
+            && let Ok(Some(author_record)) = crate::storage::users::get_user_by_id(&wp.author_id).await
+                && let Ok(Some(liker)) = crate::storage::users::get_user_by_id(user_id).await
+                    && author_record.user.id != user_id {
                         let _ = crate::storage::notifications::create_notification_db(
                             &author_record.user.id,
                             "New Like",
@@ -145,9 +145,6 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
                         )
                         .await;
                     }
-                }
-            }
-        }
 
         Ok(true)
     }
