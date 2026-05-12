@@ -28,7 +28,7 @@ pub fn Hero() -> Element {
     };
 
     let trending_wallpapers = use_server_future(move || async move {
-        api::get_wallpapers(0, 5, api::FilterOptions::default())
+        api::get_wallpapers(None::<String>, 5, api::FilterOptions::default())
             .await
             .unwrap_or_default()
     })?;

@@ -64,10 +64,10 @@ fn PopularSection(
             timeframe: period_clone,
         };
         async move {
-            if current_cat.is_empty() {
-                get_wallpapers(0, 4, filters).await
+            if current_cat == "all" {
+                get_wallpapers(None::<String>, 4, filters).await
             } else {
-                api::get_wallpapers_by_tag(current_cat, 0, 4, filters).await
+                api::get_wallpapers_by_tag(current_cat, None::<String>, 4, filters).await
             }
         }
     });
@@ -134,7 +134,7 @@ pub fn PopularGrid(period: String) -> Element {
         _ => "popular_all_time",
     };
 
-    let mut page = use_signal(|| 0_u32);
+    let mut cursor = use_signal(|| None::<String>);
     let mut all_wallpapers = use_signal(Vec::new);
     let mut has_more = use_signal(|| true);
 
@@ -153,12 +153,12 @@ pub fn PopularGrid(period: String) -> Element {
             if !has_more() {
                 return;
             }
-            let p = page();
+            let c = cursor();
 
-            let res = if current_cat.is_empty() {
-                get_wallpapers(p, 20, filters).await
+            let res = if current_cat == "all" || current_cat.is_empty() {
+                get_wallpapers(c.clone(), 20, filters).await
             } else {
-                api::get_wallpapers_by_tag(current_cat, p, 20, filters).await
+                api::get_wallpapers_by_tag(current_cat, c, 20, filters).await
             };
 
             if let Ok(new_wps) = res {
@@ -178,7 +178,7 @@ pub fn PopularGrid(period: String) -> Element {
             breadcrumb: i18n.t("popular_breadcrumb"),
             category,
             resolution,
-            sort,
+            sort: sort.clone(),
             aspect_ratio,
             color,
             ai_filter,
@@ -186,7 +186,18 @@ pub fn PopularGrid(period: String) -> Element {
             WallpaperGrid {
                 wallpapers: all_wallpapers,
                 is_loading: _fetch().is_none(),
-                on_end_reached: move |_| { if has_more() { page += 1 } }
+                on_end_reached: move |_| {
+                    if has_more() {
+                        if let Some(last) = all_wallpapers().last() {
+                            let val = match sort().as_str() {
+                                "downloads" => last.downloads.to_string(),
+                                "rating" => last.likes.to_string(),
+                                _ => last.created_at.to_rfc3339(),
+                            };
+                            cursor.set(Some(format!("{},{}", val, last.id)));
+                        }
+                    }
+                }
             }
         }
     }

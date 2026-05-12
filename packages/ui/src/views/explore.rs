@@ -12,7 +12,7 @@ pub fn Explore(tag: String) -> Element {
     let ai_filter = use_signal(String::new);
     let timeframe = use_signal(String::new);
 
-    let mut page = use_signal(|| 0_u32);
+    let mut cursor = use_signal(|| None::<String>);
     let mut all_wallpapers = use_signal(Vec::new);
     let mut has_more = use_signal(|| true);
 
@@ -30,8 +30,8 @@ pub fn Explore(tag: String) -> Element {
             if !has_more() {
                 return;
             }
-            let p = page();
-            if let Ok(new_wps) = get_wallpapers_by_tag(current_cat, p, 20, filters).await {
+            let c = cursor();
+            if let Ok(new_wps) = get_wallpapers_by_tag(current_cat, c, 20, filters).await {
                 if new_wps.is_empty() {
                     has_more.set(false);
                 } else {
@@ -48,7 +48,7 @@ pub fn Explore(tag: String) -> Element {
             breadcrumb: "Explore",
             category,
             resolution,
-            sort,
+            sort: sort.clone(),
             aspect_ratio,
             color,
             ai_filter,
@@ -56,7 +56,18 @@ pub fn Explore(tag: String) -> Element {
             WallpaperGrid {
                 wallpapers: all_wallpapers,
                 is_loading: _fetch().is_none(),
-                on_end_reached: move |_| { if has_more() { page += 1 } },
+                on_end_reached: move |_| {
+                    if has_more() {
+                        if let Some(last) = all_wallpapers().last() {
+                            let val = match sort().as_str() {
+                                "downloads" => last.downloads.to_string(),
+                                "rating" => last.likes.to_string(),
+                                _ => last.created_at.to_rfc3339(),
+                            };
+                            cursor.set(Some(format!("{},{}", val, last.id)));
+                        }
+                    }
+                },
                 empty_message: "No wallpapers found in this category yet.".to_string(),
                 empty_submessage: "Try exploring other categories or check back later!".to_string(),
             }

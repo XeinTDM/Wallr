@@ -4,11 +4,11 @@ use crate::auth::*;
 
 #[server]
 pub async fn get_user_favorites(
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
     let user = require_auth().await?;
-    crate::storage::get_user_favorites(&user.id, page, limit)
+    crate::storage::get_user_favorites(&user.id, cursor, limit)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -79,11 +79,22 @@ pub async fn get_follow_counts(user_id: String) -> Result<(u32, u32), ServerFnEr
 
 #[server]
 pub async fn get_user_download_history(
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
     let user = require_auth().await?;
-    crate::storage::get_user_download_history_db(&user.id, page, limit)
+    crate::storage::get_user_download_history_db(&user.id, cursor, limit)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_user_feed(
+    cursor: Option<String>,
+    limit: u32,
+) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::get_user_feed_db(&user.id, cursor, limit)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }

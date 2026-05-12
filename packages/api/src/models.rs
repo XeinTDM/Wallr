@@ -144,3 +144,13 @@ pub struct DmcaClaim {
     pub status: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UploadJob {
+    pub id: String,
+    pub user_id: String,
+    pub title: String,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}

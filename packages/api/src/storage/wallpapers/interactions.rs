@@ -4,48 +4,64 @@ use super::core::get_wallpaper_by_id;
 
 pub async fn get_user_favorites(
     user_id: &str,
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
     let pool = get_pool()?;
-    let offset = page * limit;
-    let rows = sqlx::query!(
+    
+    let mut q = sqlx::QueryBuilder::new(
         r#"
         SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
         INNER JOIN user_favorites f ON w.id = f.wallpaper_id
         JOIN users u ON w.author_id = u.id
-        WHERE f.user_id = $1
-        ORDER BY w.created_at DESC
-        LIMIT $2 OFFSET $3
-        "#,
-        user_id,
-        limit as i64,
-        offset as i64
-    )
-    .fetch_all(pool)
-    .await?;
+        WHERE f.user_id = 
+        "#
+    );
+    q.push_bind(user_id);
+
+    if let Some(c) = &cursor {
+        let parts: Vec<&str> = c.split(',').collect();
+        if parts.len() == 2 {
+            let val = parts[0];
+            let id = parts[1];
+            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                q.push(" AND (w.created_at, w.id) < (");
+                q.push_bind(date.with_timezone(&chrono::Utc));
+                q.push(", ");
+                q.push_bind(id.to_string());
+                q.push(")");
+            }
+        }
+    }
+
+    q.push(" ORDER BY w.created_at DESC, w.id DESC LIMIT ");
+    q.push_bind(limit as i64);
+
+    let rows = q.build().fetch_all(pool).await?;
 
     let results: Vec<Wallpaper> = rows
         .into_iter()
-        .map(|r| Wallpaper {
-            id: r.id,
-            title: r.title,
-            author_id: r.author_id,
-            author_name: r.author_name,
-            image_url: r.image_url,
-            thumbnail_url: r.thumbnail_url,
-            tags: r.tags.0,
-            primary_colors: r.primary_colors.0,
-            dimensions: (r.width as u32, r.height as u32),
-            size_bytes: r.size_bytes as u64,
-            likes: r.likes.unwrap_or(0) as u32,
-            downloads: r.downloads.unwrap_or(0) as u32,
-            created_at: r.created_at,
-            is_private: r.is_private,
-            is_live: r.is_live,
+        .map(|r| {
+            use sqlx::Row;
+            Wallpaper {
+            id: r.get("id"),
+            title: r.get("title"),
+            author_id: r.get("author_id"),
+            author_name: r.get("author_name!"),
+            image_url: r.get("image_url"),
+            thumbnail_url: r.get("thumbnail_url"),
+            tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,
+            primary_colors: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("primary_colors").0,
+            dimensions: (r.get::<'_, i32, _>("width") as u32, r.get::<'_, i32, _>("height") as u32),
+            size_bytes: r.get::<'_, i64, _>("size_bytes") as u64,
+            likes: r.get::<'_, i32, _>("likes") as u32,
+            downloads: r.get::<'_, i32, _>("downloads") as u32,
+            created_at: r.get("created_at"),
+            is_private: r.get("is_private"),
+            is_live: r.get("is_live"),
             embedding: None,
             phash: None,
-        })
+        }})
         .collect();
     let arc_results = std::sync::Arc::new(results);
     Ok(arc_results)
@@ -196,51 +212,134 @@ pub async fn record_user_download_db(user_id: &str, wallpaper_id: &str) -> anyho
     Ok(())
 }
 
-pub async fn get_user_download_history_db(
+pub async fn get_user_feed_db(
     user_id: &str,
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
     let pool = get_pool()?;
-    let offset = page * limit;
-    let rows = sqlx::query!(
+    
+    let mut q = sqlx::QueryBuilder::new(
         r#"
         SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
         FROM wallpapers w
-        INNER JOIN user_downloads d ON w.id = d.wallpaper_id
+        INNER JOIN user_follows f ON w.author_id = f.following_id
         JOIN users u ON w.author_id = u.id
-        WHERE d.user_id = $1
-        ORDER BY d.downloaded_at DESC
-        LIMIT $2 OFFSET $3
-        "#,
-        user_id,
-        limit as i64,
-        offset as i64
-    )
-    .fetch_all(pool)
-    .await?;
+        WHERE f.follower_id = 
+        "#
+    );
+    q.push_bind(user_id);
+    q.push(" AND w.is_private = false");
+
+    if let Some(c) = &cursor {
+        let parts: Vec<&str> = c.split(',').collect();
+        if parts.len() == 2 {
+            let val = parts[0];
+            let id = parts[1];
+            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                q.push(" AND (w.created_at, w.id) < (");
+                q.push_bind(date.with_timezone(&chrono::Utc));
+                q.push(", ");
+                q.push_bind(id.to_string());
+                q.push(")");
+            }
+        }
+    }
+
+    q.push(" ORDER BY w.created_at DESC, w.id DESC LIMIT ");
+    q.push_bind(limit as i64);
+
+    let rows = q.build().fetch_all(pool).await?;
 
     let results: Vec<Wallpaper> = rows
         .into_iter()
-        .map(|r| Wallpaper {
-            id: r.id,
-            title: r.title,
-            author_id: r.author_id,
-            author_name: r.author_name,
-            image_url: r.image_url,
-            thumbnail_url: r.thumbnail_url,
-            tags: r.tags.0,
-            primary_colors: r.primary_colors.0,
-            dimensions: (r.width as u32, r.height as u32),
-            size_bytes: r.size_bytes as u64,
-            likes: r.likes.unwrap_or(0) as u32,
-            downloads: r.downloads.unwrap_or(0) as u32,
-            created_at: r.created_at,
-            is_private: r.is_private,
-            is_live: r.is_live,
+        .map(|r| {
+            use sqlx::Row;
+            Wallpaper {
+            id: r.get("id"),
+            title: r.get("title"),
+            author_id: r.get("author_id"),
+            author_name: r.get("author_name!"),
+            image_url: r.get("image_url"),
+            thumbnail_url: r.get("thumbnail_url"),
+            tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,
+            primary_colors: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("primary_colors").0,
+            dimensions: (r.get::<'_, i32, _>("width") as u32, r.get::<'_, i32, _>("height") as u32),
+            size_bytes: r.get::<'_, i64, _>("size_bytes") as u64,
+            likes: r.get::<'_, i32, _>("likes") as u32,
+            downloads: r.get::<'_, i32, _>("downloads") as u32,
+            created_at: r.get("created_at"),
+            is_private: r.get("is_private"),
+            is_live: r.get("is_live"),
             embedding: None,
             phash: None,
-        })
+        }})
+        .collect();
+    let arc_results = std::sync::Arc::new(results);
+    Ok(arc_results)
+}
+
+pub async fn get_user_download_history_db(
+    user_id: &str,
+    cursor: Option<String>,
+    limit: u32,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
+    let pool = get_pool()?;
+    
+    let mut q = sqlx::QueryBuilder::new(
+        r#"
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, d.downloaded_at 
+        FROM wallpapers w
+        INNER JOIN user_downloads d ON w.id = d.wallpaper_id
+        JOIN users u ON w.author_id = u.id
+        WHERE d.user_id = 
+        "#
+    );
+    q.push_bind(user_id);
+
+    if let Some(c) = &cursor {
+        let parts: Vec<&str> = c.split(',').collect();
+        if parts.len() == 2 {
+            let val = parts[0];
+            let id = parts[1];
+            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                q.push(" AND (d.downloaded_at, w.id) < (");
+                q.push_bind(date.with_timezone(&chrono::Utc));
+                q.push(", ");
+                q.push_bind(id.to_string());
+                q.push(")");
+            }
+        }
+    }
+
+    q.push(" ORDER BY d.downloaded_at DESC, w.id DESC LIMIT ");
+    q.push_bind(limit as i64);
+
+    let rows = q.build().fetch_all(pool).await?;
+
+    let results: Vec<Wallpaper> = rows
+        .into_iter()
+        .map(|r| {
+            use sqlx::Row;
+            Wallpaper {
+            id: r.get("id"),
+            title: r.get("title"),
+            author_id: r.get("author_id"),
+            author_name: r.get("author_name!"),
+            image_url: r.get("image_url"),
+            thumbnail_url: r.get("thumbnail_url"),
+            tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,
+            primary_colors: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("primary_colors").0,
+            dimensions: (r.get::<'_, i32, _>("width") as u32, r.get::<'_, i32, _>("height") as u32),
+            size_bytes: r.get::<'_, i64, _>("size_bytes") as u64,
+            likes: r.get::<'_, i32, _>("likes") as u32,
+            downloads: r.get::<'_, i32, _>("downloads") as u32,
+            created_at: r.get("created_at"),
+            is_private: r.get("is_private"),
+            is_live: r.get("is_live"),
+            embedding: None,
+            phash: None,
+        }})
         .collect();
     let arc_results = std::sync::Arc::new(results);
     Ok(arc_results)

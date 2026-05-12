@@ -27,7 +27,7 @@ pub fn Profile() -> Element {
 
     let uploads = use_resource(move || async move { api::get_user_uploads(0, 100).await });
     let collections = use_resource(move || async move { get_my_collections().await });
-    let favorites = use_resource(move || async move { api::get_user_favorites(0, 100).await });
+    let favorites = use_resource(move || async move { api::get_user_favorites(None::<String>, 100).await });
     let analytics = use_resource(move || async move { api::get_creator_analytics().await });
 
     let uploads_count = uploads()

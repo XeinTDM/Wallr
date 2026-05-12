@@ -203,3 +203,44 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+pub async fn create_upload_job(id: &str, user_id: &str, title: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "INSERT INTO upload_jobs (id, user_id, title) VALUES ($1, $2, $3)",
+        id, user_id, title
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_upload_job_status(id: &str, status: &str, error_message: Option<&str>) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE upload_jobs SET status = $1, error_message = $2 WHERE id = $3",
+        status, error_message, id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_upload_status(id: &str) -> anyhow::Result<Option<crate::models::UploadJob>> {
+    let pool = get_pool()?;
+    let row = sqlx::query!(
+        "SELECT id, user_id, title, status, error_message, created_at FROM upload_jobs WHERE id = $1",
+        id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| crate::models::UploadJob {
+        id: r.id,
+        user_id: r.user_id,
+        title: r.title,
+        status: r.status,
+        error_message: r.error_message,
+        created_at: r.created_at,
+    }))
+}

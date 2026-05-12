@@ -232,7 +232,7 @@ fn App() -> Element {
                                 candidates = playlist;
                             }
                             if candidates.is_empty()
-                                && let Ok(favs) = api::get_user_favorites(0, 100).await {
+                                && let Ok(favs) = api::get_user_favorites(None::<String>, 100).await {
                                     candidates = favs.to_vec();
                                 }
 

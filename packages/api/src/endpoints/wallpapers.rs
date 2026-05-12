@@ -5,11 +5,11 @@ use crate::auth::*;
 /// Fetch a list of trending wallpapers from the server.
 #[server]
 pub async fn get_wallpapers(
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
     filters: FilterOptions,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
-    crate::storage::load_all_wallpapers(page, limit, filters)
+    crate::storage::load_all_wallpapers(cursor, limit, filters)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -18,16 +18,16 @@ pub async fn get_wallpapers(
 #[server]
 pub async fn get_wallpapers_by_tag(
     tag: String,
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
     filters: FilterOptions,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
     let tag = tag.to_lowercase();
     if tag == "featured" || tag == "popular" || tag == "latest" || tag == "all" {
-        return get_wallpapers(page, limit, filters).await;
+        return get_wallpapers(cursor, limit, filters).await;
     }
 
-    crate::storage::get_wallpapers_by_tag(&tag, page, limit, filters)
+    crate::storage::get_wallpapers_by_tag(&tag, cursor, limit, filters)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -49,15 +49,15 @@ pub async fn get_trending_tags(limit: u32) -> Result<Vec<String>, ServerFnError>
 #[server]
 pub async fn search_wallpapers(
     query: String,
-    page: u32,
+    cursor: Option<String>,
     limit: u32,
     filters: FilterOptions,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
     if query.is_empty() {
-        return get_wallpapers(page, limit, filters).await;
+        return get_wallpapers(cursor, limit, filters).await;
     }
 
-    crate::storage::search_wallpapers_db(&query, page, limit, filters)
+    crate::storage::search_wallpapers_db(&query, cursor, limit, filters)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -141,6 +141,22 @@ pub async fn get_similar_wallpapers(
     crate::storage::get_similar_wallpapers_db(&id, limit)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_upload_status(job_id: String) -> Result<Option<UploadJob>, ServerFnError> {
+    let user = require_auth().await?;
+    let job = crate::storage::wallpapers::core::get_upload_status(&job_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    if let Some(ref j) = job {
+        if j.user_id != user.id && user.role != "admin" {
+            return Err(ServerFnError::new("api_err_unauthorized"));
+        }
+    }
+    
+    Ok(job)
 }
 
 
