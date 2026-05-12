@@ -80,10 +80,10 @@ pub fn Profile() -> Element {
 
             div {
                 style: "display: flex; gap: 32px; margin-bottom: 48px; border-bottom: 1px solid rgba(255,255,255,0.1);",
-                {render_profile_tab(&i18n.t("profile_tab_favorites"), favorites_count, active_tab() == "favorites", move |_| active_tab.set("favorites".into()))}
-                {render_profile_tab(&i18n.t("profile_tab_uploads"), uploads_count, active_tab() == "uploads", move |_| active_tab.set("uploads".into()))}
-                {render_profile_tab(&i18n.t("profile_tab_collections"), collections_count, active_tab() == "collections", move |_| active_tab.set("collections".into()))}
-                {render_profile_tab(&i18n.t("profile_tab_analytics"), None, active_tab() == "analytics", move |_| active_tab.set("analytics".into()))}
+                {render_profile_tab(i18n.t("profile_tab_favorites"), favorites_count, active_tab() == "favorites", move |_| active_tab.set("favorites".into()))}
+                {render_profile_tab(i18n.t("profile_tab_uploads"), uploads_count, active_tab() == "uploads", move |_| active_tab.set("uploads".into()))}
+                {render_profile_tab(i18n.t("profile_tab_collections"), collections_count, active_tab() == "collections", move |_| active_tab.set("collections".into()))}
+                {render_profile_tab(i18n.t("profile_tab_analytics"), None, active_tab() == "analytics", move |_| active_tab.set("analytics".into()))}
             }
 
             div {
@@ -310,7 +310,7 @@ pub fn render_profile_tab(
         div {
             key: "{label}",
             class: if active { "profile-tab active" } else { "profile-tab" },
-            onclick: move |e| onclick(e),
+            onclick: onclick,
             "{label} "
             if let Some(c) = count {
                 span {
@@ -525,7 +525,7 @@ pub struct CreateCollectionModalProps {
 pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let i18n = crate::i18n::use_i18n();
     let mut is_open = props.is_open;
-    let mut name = use_signal(|| String::new());
+    let mut name = use_signal(String::new);
 
     use_effect(move || {
         #[allow(unused_variables)]

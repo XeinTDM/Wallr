@@ -73,7 +73,7 @@ async fn save_as_native(wp_title: String, image_url: String) -> Result<(), Strin
 pub fn WallpaperDetail(id: String) -> Element {
     let auth_state = use_context::<Signal<AuthState>>();
     let mut is_adding_tag = use_signal(|| false);
-    let mut new_tag_input = use_signal(|| String::new());
+    let mut new_tag_input = use_signal(String::new);
 
     let mut toaster = use_toaster();
     let i18n = crate::i18n::use_i18n();
@@ -185,12 +185,12 @@ pub fn WallpaperDetail(id: String) -> Element {
                     };
                     let delete_id = wp.id.clone();
                     let delete_id_clone = delete_id.clone();
-                    let is_author = if let AuthState::Authenticated(u) = auth_state() { u.name == wp.author } else { false };
+                    let is_author = if let AuthState::Authenticated(u) = auth_state() { u.id == wp.author_id } else { false };
                     let is_admin = if let AuthState::Authenticated(u) = auth_state() { u.role == "admin" } else { false };
 
                     let absolute_img_url = format!("https://wallr.app{}", crate::resolve_asset_url(&wp.thumbnail_url));
-                    let title_text = format!("{} by {} - Wallr", wp.title, wp.author);
-                    let desc_text = format!("View this high-quality wallpaper uploaded by {} on Wallr.", wp.author);
+                    let title_text = format!("{} by {} - Wallr", wp.title, wp.author_name);
+                    let desc_text = format!("View this high-quality wallpaper uploaded by {} on Wallr.", wp.author_name);
 
                     rsx! {
                         document::Title { "{title_text}" }
@@ -246,9 +246,9 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     style: "color: var(--text-secondary); margin-bottom: 32px;",
                                     "{i18n.t(\"wp_by\")}"
                                     Link {
-                                        to: Route::PublicProfile { username: wp.author.replace(" ", "-") },
+                                        to: Route::PublicProfile { username: wp.author_name.replace(" ", "-") },
                                         style: "color: var(--accent-primary); text-decoration: none;",
-                                        "{wp.author}"
+                                        "{wp.author_name}"
                                     }
                                 }
 
@@ -527,7 +527,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     api::delete_wallpaper_endpoint(id_to_delete.clone()).await
                                                 };
 
-                                                if let Ok(_) = result {
+                                                if result.is_ok() {
                                                     if is_admin_clone && !is_author_clone {
                                                         toaster.info(format!("Admin: Deleted '{}'. Reason: {}", wp_title, reason.unwrap_or_else(|| "None provided".into())));
                                                     } else {
@@ -584,7 +584,7 @@ pub fn WallpaperDetail(id: String) -> Element {
                                     Tag { key: "{tag}", tag }
                                 }
                                 if let AuthState::Authenticated(u) = auth_state() {
-                                    if u.name == wp.author {
+                                    if u.id == wp.author_id {
                                         if is_adding_tag() {
                                             form {
                                                 onsubmit: move |e| {
@@ -686,7 +686,7 @@ fn DetailItem(label: String, value: String) -> Element {
 #[component]
 fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
     let mut page = use_signal(|| 0u32);
-    let mut all_comments = use_signal(|| Vec::<api::WallpaperComment>::new());
+    let mut all_comments = use_signal(Vec::<api::WallpaperComment>::new);
     let mut has_more = use_signal(|| true);
 
     let wid_for_res = wallpaper_id.clone();
@@ -877,3 +877,4 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
         }
     }
 }
+

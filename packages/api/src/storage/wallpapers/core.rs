@@ -18,7 +18,8 @@ pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     Wallpaper {
         id: row.get("id"),
         title: row.get("title"),
-        author: row.get("author"),
+        author_id: row.get("author_id"),
+        author_name: row.get("author_name"),
         image_url: row.get("image_url"),
         thumbnail_url: row.get("thumbnail_url"),
         tags: tags_val.0,
@@ -43,11 +44,11 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
 
     sqlx::query!(
         r#"
-        INSERT INTO wallpapers (id, title, author, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding, phash)
+        INSERT INTO wallpapers (id, title, author_id, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding, phash)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO UPDATE SET
             title = EXCLUDED.title,
-            author = EXCLUDED.author,
+            author_id = EXCLUDED.author_id,
             image_url = EXCLUDED.image_url,
             thumbnail_url = EXCLUDED.thumbnail_url,
             tags = EXCLUDED.tags,
@@ -64,7 +65,7 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
         "#,
         wallpaper.id,
         wallpaper.title,
-        wallpaper.author,
+        wallpaper.author_id,
         wallpaper.image_url,
         wallpaper.thumbnail_url,
         sqlx::types::Json(&wallpaper.tags) as _,
@@ -95,14 +96,15 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
     }
 
     let pool = get_pool()?;
-    let row = sqlx::query!(r#"SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers WHERE id = $1"#, id)
+    let row = sqlx::query!(r#"SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1"#, id)
         .fetch_optional(pool)
         .await?;
 
     let result = row.map(|r| Wallpaper {
         id: r.id,
         title: r.title,
-        author: r.author,
+        author_id: r.author_id,
+        author_name: r.author_name,
         image_url: r.image_url,
         thumbnail_url: r.thumbnail_url,
         tags: r.tags.0,
@@ -152,7 +154,7 @@ pub async fn delete_wallpaper(id: &str) -> anyhow::Result<()> {
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query!("DELETE FROM wallpapers WHERE id = $1", id)
+    sqlx::query!("DELETE FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1", id)
         .execute(&mut *tx)
         .await?;
 
@@ -175,7 +177,7 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
     let tag_array_json = serde_json::json!([tag]);
 
     let exists: Option<i32> = sqlx::query_scalar!(
-        r#"SELECT 1 as result FROM wallpapers WHERE id = $1 AND tags @> $2"#,
+        r#"SELECT 1 as result FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1 AND tags @> $2"#,
         wallpaper_id,
         tag_array_json
     )
@@ -194,6 +196,13 @@ pub async fn add_tag(wallpaper_id: &str, tag: &str) -> anyhow::Result<()> {
 
         crate::storage::cache::get_wallpaper_cache()
             .remove(wallpaper_id)
+            .await;
+        crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
+    }
+
+    Ok(())
+}
+r_id)
             .await;
         crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
     }

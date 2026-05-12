@@ -176,10 +176,11 @@ pub async fn get_collection_wallpapers_db(
     let rows = sqlx::query!(
         r#"
         SELECT 
-            w.id, w.title, w.author, w.image_url, w.thumbnail_url, 
+            w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, 
             w.tags, w.primary_colors, w.width, w.height, w.size_bytes, 
             w.likes, w.downloads, w.created_at, w.is_private
         FROM wallpapers w
+        JOIN users u ON w.author_id = u.id
         JOIN collection_items ci ON ci.wallpaper_id = w.id
         WHERE ci.collection_id = $1
         ORDER BY ci.added_at DESC
@@ -200,7 +201,8 @@ pub async fn get_collection_wallpapers_db(
         wallpapers.push(crate::Wallpaper {
             id: row.id,
             title: row.title,
-            author: row.author,
+            author_id: row.author_id,
+            author_name: row.author_name,
             image_url: row.image_url,
             thumbnail_url: row.thumbnail_url,
             tags,

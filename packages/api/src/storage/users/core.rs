@@ -173,7 +173,7 @@ pub async fn delete_user(user_id: &str) -> anyhow::Result<()> {
 
     if let Some(u) = user {
         let wp_ids: Vec<String> =
-            sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author = $1", u.name)
+            sqlx::query_scalar!("SELECT id FROM wallpapers WHERE author_id = $1", user_id)
                 .fetch_all(&mut *tx)
                 .await?;
 
@@ -181,7 +181,7 @@ pub async fn delete_user(user_id: &str) -> anyhow::Result<()> {
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query!("DELETE FROM wallpapers WHERE author = $1", u.name)
+        sqlx::query!("DELETE FROM wallpapers WHERE author_id = $1", user_id)
             .execute(&mut *tx)
             .await?;
 

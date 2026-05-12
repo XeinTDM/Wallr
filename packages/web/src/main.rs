@@ -234,7 +234,8 @@ fn main() {
 
                 let mut out = std::io::Cursor::new(Vec::new());
                 let img_format = match format_str.as_str() {
-                    "jpeg" | "jpg" | "avif" => image::ImageFormat::Jpeg, // Fallback AVIF to JPEG since we can't encode AVIF natively
+                    "jpeg" | "jpg" => image::ImageFormat::Jpeg,
+                    "avif" => image::ImageFormat::Avif,
                     "png" => image::ImageFormat::Png,
                     _ => return Err("Unsupported format".to_string()),
                 };
@@ -284,16 +285,16 @@ fn main() {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("Untitled")
                 .to_string();
-            let author = {
+            let (author_id, author_name) = {
                 let token = extract_session_token(&headers);
 
                 if let Some(token_str) = token {
                     api::storage::verify_token(&token_str)
                         .await
-                        .map(|u| u.name)
-                        .unwrap_or_else(|_| "Anonymous".to_string())
+                        .map(|u| (u.id, u.name))
+                        .unwrap_or_else(|_| ("".to_string(), "Anonymous".to_string()))
                 } else {
-                    "Anonymous".to_string()
+                    ("".to_string(), "Anonymous".to_string())
                 }
             };
             let user_tags: Vec<String> = headers
@@ -313,7 +314,7 @@ fn main() {
                 .map(|v| v == "true")
                 .unwrap_or(false);
 
-            match api::upload_raw_impl(title, author, user_tags, body.to_vec(), is_private).await {
+            match api::upload_raw_impl(title, author_id, author_name, user_tags, body.to_vec(), is_private).await {
                 Ok(id) => axum::response::Response::new(id.into()),
                 Err(e) => {
                     let mut res = axum::response::Response::new(e.to_string().into());
@@ -450,6 +451,17 @@ fn main() {
                     e
                 );
             } else {
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+                    loop {
+                        interval.tick().await;
+                        if let Ok(pool) = api::storage::get_pool() {
+                            let _ = sqlx::query!("REFRESH MATERIALIZED VIEW CONCURRENTLY trending_tags")
+                                .execute(pool)
+                                .await;
+                        }
+                    }
+                });
             }
             api::ai::init_tagger();
             let router = dioxus::server::router(App);

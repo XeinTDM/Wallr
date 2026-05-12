@@ -134,7 +134,7 @@ fn AddFromUploadsModal(
     on_added: EventHandler<()>,
 ) -> Element {
     let i18n = crate::i18n::use_i18n();
-    let mut just_added = use_signal(|| std::collections::HashSet::<String>::new());
+    let mut just_added = use_signal(std::collections::HashSet::<String>::new);
 
     use_effect(move || {
         if !is_open() {
@@ -227,12 +227,12 @@ fn AddFromUploadsModal(
                                                 onclick: {
                                                     let w_id = wp.id.clone();
                                                     let c_id = collection_id.clone();
-                                                    let on_added = on_added.clone();
+                                                    let on_added = on_added;
                                                     let mut just_added_sig = just_added;
                                                     move |_| {
                                                         let w_id = w_id.clone();
                                                         let c_id = c_id.clone();
-                                                        let on_added = on_added.clone();
+                                                        let on_added = on_added;
                                                         just_added_sig.write().insert(w_id.clone());
                                                         spawn(async move {
                                                             if let Ok(_) = add_wallpaper_to_collection(c_id, w_id).await {

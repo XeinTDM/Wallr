@@ -78,7 +78,7 @@ pub async fn add_tag_to_wallpaper(wallpaper_id: String, tag: String) -> Result<(
         None => return Err(ServerFnError::new("api_err_wp_not_found")),
     };
 
-    if wp.author != user.name {
+    if wp.author_id != user.id && user.role != "admin" {
         return Err(ServerFnError::new("api_err_unauthorized"));
     }
     crate::storage::add_tag(&wallpaper_id, &tag)
@@ -100,7 +100,7 @@ pub async fn delete_wallpaper_endpoint(id: String) -> Result<(), ServerFnError> 
         None => return Err(ServerFnError::new("api_err_wp_not_found")),
     };
 
-    if wp.author != user.name {
+    if wp.author_id != user.id && user.role != "admin" {
         return Err(ServerFnError::new("api_err_unauthorized"));
     }
 

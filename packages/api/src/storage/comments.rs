@@ -112,7 +112,7 @@ pub async fn delete_comment_db(
         DELETE FROM wallpaper_comments 
         WHERE id = $1 AND (
             user_id = $2 OR 
-            wallpaper_id IN (SELECT id FROM wallpapers WHERE author = $3)
+            wallpaper_id IN (SELECT id FROM wallpapers WHERE author_id = (SELECT id FROM users WHERE name = $3))
         )
         "#,
         comment_id,

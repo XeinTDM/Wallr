@@ -4,7 +4,9 @@ mod en;
 mod es;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default)]
 pub enum Language {
+    #[default]
     English,
     Spanish,
 }
@@ -18,11 +20,6 @@ impl Language {
     }
 }
 
-impl Default for Language {
-    fn default() -> Self {
-        Language::English
-    }
-}
 
 pub fn use_i18n() -> I18nContext {
     let lang = use_context::<Signal<Language>>();

@@ -97,9 +97,23 @@ struct UserInfo {
 }
 
 async fn oauth_callback(
+    headers: axum::http::HeaderMap,
     Path(provider): Path<String>,
     Query(query): Query<AuthRequest>,
 ) -> impl IntoResponse {
+    let expected_state = headers
+        .get_all(axum::http::header::COOKIE)
+        .iter()
+        .filter_map(|val| val.to_str().ok())
+        .flat_map(|cookie_str| cookie_str.split(';'))
+        .map(|s| s.trim())
+        .find(|s| s.starts_with("oauth_csrf="))
+        .map(|s| s.trim_start_matches("oauth_csrf=").to_string());
+
+    if Some(query.state.clone()) != expected_state {
+        return Redirect::to("/login?error=invalid_csrf_token").into_response();
+    }
+
     let client = match get_client(&provider) {
         Some(c) => c,
         None => return Redirect::to("/login?error=unsupported_provider").into_response(),

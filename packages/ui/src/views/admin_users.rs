@@ -10,8 +10,8 @@ pub fn AdminUsers() -> Element {
     let nav = use_navigator();
 
     let mut bulk_hours = use_signal(|| 24_u32);
-    let mut bulk_pattern = use_signal(|| String::new());
-    let mut status_msg = use_signal(|| String::new());
+    let mut bulk_pattern = use_signal(String::new);
+    let mut status_msg = use_signal(String::new);
 
     let (is_allowed, user_role, current_user_id) = match auth_state() {
         AuthState::Authenticated(u) => (

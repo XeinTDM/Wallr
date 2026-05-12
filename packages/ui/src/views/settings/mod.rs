@@ -52,13 +52,11 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
                 key
             ));
             spawn(async move {
-                if let Ok(val) = eval.recv::<String>().await {
-                    if !val.is_empty() {
-                        if let Ok(parsed) = val.parse::<T>() {
+                if let Ok(val) = eval.recv::<String>().await
+                    && !val.is_empty()
+                        && let Ok(parsed) = val.parse::<T>() {
                             sig.set(parsed);
                         }
-                    }
-                }
             });
         });
     }
@@ -79,7 +77,7 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
             let script = format!(
                 "localStorage.setItem('{}', '{}'); window.dispatchEvent(new Event('local-storage-update'));",
                 key,
-                val.to_string()
+                val
             );
             let _ = dioxus::document::eval(&script);
         }

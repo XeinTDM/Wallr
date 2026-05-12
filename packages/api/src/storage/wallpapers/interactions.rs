@@ -11,8 +11,9 @@ pub async fn get_user_favorites(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
         INNER JOIN user_favorites f ON w.id = f.wallpaper_id
+        JOIN users u ON w.author_id = u.id
         WHERE f.user_id = $1
         ORDER BY w.created_at DESC
         LIMIT $2 OFFSET $3
@@ -29,7 +30,8 @@ pub async fn get_user_favorites(
         .map(|r| Wallpaper {
             id: r.id,
             title: r.title,
-            author: r.author,
+            author_id: r.author_id,
+            author_name: r.author_name,
             image_url: r.image_url,
             thumbnail_url: r.thumbnail_url,
             tags: r.tags.0,
@@ -133,7 +135,7 @@ pub async fn toggle_favorite(user_id: &str, wallpaper_id: &str) -> anyhow::Resul
         crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 
         if let Ok(Some(wp)) = get_wallpaper_by_id(wallpaper_id).await {
-            if let Ok(Some(author_record)) = crate::storage::users::get_user_by_name(&wp.author).await {
+            if let Ok(Some(author_record)) = crate::storage::users::get_user_by_id(&wp.author_id).await {
                 if let Ok(Some(liker)) = crate::storage::users::get_user_by_id(user_id).await {
                     if author_record.user.id != user_id {
                         let _ = crate::storage::notifications::create_notification_db(
@@ -206,9 +208,10 @@ pub async fn get_user_download_history_db(
     let offset = page * limit;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
         FROM wallpapers w
         INNER JOIN user_downloads d ON w.id = d.wallpaper_id
+        JOIN users u ON w.author_id = u.id
         WHERE d.user_id = $1
         ORDER BY d.downloaded_at DESC
         LIMIT $2 OFFSET $3
@@ -225,7 +228,8 @@ pub async fn get_user_download_history_db(
         .map(|r| Wallpaper {
             id: r.id,
             title: r.title,
-            author: r.author,
+            author_id: r.author_id,
+            author_name: r.author_name,
             image_url: r.image_url,
             thumbnail_url: r.thumbnail_url,
             tags: r.tags.0,

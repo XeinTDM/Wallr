@@ -204,8 +204,8 @@ fn App() -> Element {
                         }
                     }
 
-                    if let Ok(event) = tray_channel.try_recv() {
-                        if let tray_icon::TrayIconEvent::Click {
+                    if let Ok(event) = tray_channel.try_recv()
+                        && let tray_icon::TrayIconEvent::Click {
                             button: MouseButton::Left,
                             ..
                         } = event
@@ -223,7 +223,6 @@ fn App() -> Element {
                                 window.set_visible(false);
                             }
                         }
-                    }
 
                     if let Ok(event) = hotkey_channel.try_recv() {
                         if event.id == id_w || event.id == id_right || event.id == id_left {
@@ -232,11 +231,10 @@ fn App() -> Element {
                             if let Ok((playlist, _)) = api::get_active_playlist_items().await {
                                 candidates = playlist;
                             }
-                            if candidates.is_empty() {
-                                if let Ok(favs) = api::get_user_favorites(0, 100).await {
+                            if candidates.is_empty()
+                                && let Ok(favs) = api::get_user_favorites(0, 100).await {
                                     candidates = favs.to_vec();
                                 }
-                            }
 
                             if !candidates.is_empty() {
                                 let mut rng = rand::thread_rng();

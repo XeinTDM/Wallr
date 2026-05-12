@@ -58,7 +58,7 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                         class: "card-top-actions",
                         style: "display: flex; justify-content: flex-end; gap: 8px; width: 100%; z-index: 5; pointer-events: auto;",
 
-                        if let Some(on_remove) = props.on_remove.clone() {
+                        if let Some(on_remove) = props.on_remove {
                             button {
                                 class: "action-btn remove-btn",
                                 style: "display: flex; align-items: center; justify-content: center; padding: 6px; backdrop-filter: blur(12px); border-radius: 10px; color: #ef4444; background: rgba(0,0,0,0.5); cursor: pointer; transition: all 0.2s; border: none; margin-right: auto;",
@@ -118,7 +118,7 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
                         p {
                             style: "display: flex; align-items: center; gap: 4px; opacity: 0.9; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 600; pointer-events: auto; z-index: 5;",
                             lucide_dioxus::User { size: 12 }
-                            a { href: "/user/{props.wallpaper.author.replace(\" \", \"-\")}", style: "color: inherit; text-decoration: none;", "{props.wallpaper.author}" }
+                            a { href: "/user/{props.wallpaper.author_name.replace(\" \", \"-\")}", style: "color: inherit; text-decoration: none;", "{props.wallpaper.author_name}" }
                         }
                     }
 

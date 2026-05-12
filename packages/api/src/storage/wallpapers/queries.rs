@@ -343,7 +343,7 @@ pub async fn search_wallpapers_db(
     apply_filters(&mut q, &filters);
 
     if let Some(embed) = embed_opt {
-        q.push(" ORDER BY embedding <=> ");
+        q.push(" ORDER BY w.embedding <=> ");
         q.push_bind(embed);
     } else if !query.is_empty() {
         match filters.sort.as_str() {
@@ -439,9 +439,10 @@ pub async fn get_similar_wallpapers_db(
                 WHERE d2.wallpaper_id != $1
                 GROUP BY d2.wallpaper_id
             )
-            SELECT w.id, w.title, w.author, w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live,
+            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live,
                    (COALESCE(c.collab_score, 0) * 2 + COALESCE(d.collab_score, 0)) as "total_score!"
             FROM wallpapers w
+            JOIN users u ON w.author_id = u.id
             LEFT JOIN collab c ON w.id = c.wallpaper_id
             LEFT JOIN collab_down d ON w.id = d.wallpaper_id
             WHERE w.id != $1 AND w.is_private = false AND (c.collab_score > 0 OR d.collab_score > 0)
@@ -453,10 +454,11 @@ pub async fn get_similar_wallpapers_db(
 
         let visual_rows = sqlx::query!(
             r#"
-            SELECT id, title, author, image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live 
-            FROM wallpapers 
-            WHERE id != $1 AND is_private = false
-            ORDER BY embedding <=> $2 
+            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, created_at, is_private, is_live 
+            FROM wallpapers w
+            JOIN users u ON w.author_id = u.id
+            WHERE w.id != $1 AND w.is_private = false
+            ORDER BY w.embedding <=> $2 
             LIMIT $3
             "#,
             id,
@@ -473,7 +475,8 @@ pub async fn get_similar_wallpapers_db(
                 results.push(Wallpaper {
                     id: r.id,
                     title: r.title,
-                    author: r.author,
+                    author_id: r.author_id,
+                    author_name: r.author_name,
                     image_url: r.image_url,
                     thumbnail_url: r.thumbnail_url,
                     tags: r.tags.0,
@@ -497,7 +500,8 @@ pub async fn get_similar_wallpapers_db(
                 results.push(Wallpaper {
                     id: r.id,
                     title: r.title,
-                    author: r.author,
+                    author_id: r.author_id,
+                    author_name: r.author_name,
                     image_url: r.image_url,
                     thumbnail_url: r.thumbnail_url,
                     tags: r.tags.0,
@@ -511,6 +515,16 @@ pub async fn get_similar_wallpapers_db(
                     is_live: r.is_live,
                     embedding: None,
                     phash: None,
+                });
+            }
+        }
+
+        results.truncate(limit as usize);
+        return Ok(std::sync::Arc::new(results));
+    }
+
+    Ok(std::sync::Arc::new(vec![]))
+}
                 });
             }
         }

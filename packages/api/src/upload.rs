@@ -4,7 +4,8 @@ use dioxus::prelude::*;
 #[cfg(feature = "server")]
 pub async fn upload_raw_impl(
     title: String,
-    author: String,
+    author_id: String,
+    author_name: String,
     user_tags: Vec<String>,
     bytes: Vec<u8>,
     is_private: bool,
@@ -165,16 +166,34 @@ pub async fn upload_raw_impl(
         }
     }
 
+    let mut final_image_url = image_url;
+    let mut final_size_bytes = original_bytes_len;
+
+    if !is_live {
+        if let Some(img) = img_opt {
+            let bg_id = id.clone();
+            let avif_result = tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img)).await;
+            if let Ok(Ok(avif_data)) = avif_result {
+                let avif_url = crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data).unwrap_or_default();
+                if !avif_url.is_empty() {
+                    final_image_url = avif_url;
+                    final_size_bytes = avif_data.len() as u64;
+                }
+            }
+        }
+    }
+
     let wallpaper = Wallpaper {
         id: id.clone(),
         title,
-        author,
-        image_url,
+        author_id,
+        author_name,
+        image_url: final_image_url,
         thumbnail_url,
         tags,
         primary_colors,
         dimensions: (width, height),
-        size_bytes: original_bytes_len,
+        size_bytes: final_size_bytes,
         likes: 0,
         downloads: 0,
         created_at: chrono::Utc::now(),
@@ -185,38 +204,6 @@ pub async fn upload_raw_impl(
     };
 
     crate::storage::save_wallpaper_data(&wallpaper).await?;
-
-    if !is_live {
-        if let Some(img) = img_opt {
-            let bg_id = id.clone();
-            tokio::spawn(async move {
-                let avif_result =
-                    tokio::task::spawn_blocking(move || crate::processor::convert_to_avif(&img))
-                        .await;
-
-                if let Ok(Ok(avif_data)) = avif_result {
-                    let avif_url =
-                        crate::storage::save_image_file(&bg_id, "master", "avif", &avif_data)
-                            .unwrap_or_default();
-                    if let Ok(pool) = crate::storage::get_pool() {
-                        let size = avif_data.len() as i64;
-                        let _ = sqlx::query!(
-                            "UPDATE wallpapers SET size_bytes = $1, image_url = $2 WHERE id = $3",
-                            size,
-                            avif_url,
-                            bg_id
-                        )
-                        .execute(pool)
-                        .await;
-                        crate::storage::cache::get_wallpaper_cache()
-                            .remove(&bg_id)
-                            .await;
-                        crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
-                    }
-                }
-            });
-        }
-    }
 
     crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 

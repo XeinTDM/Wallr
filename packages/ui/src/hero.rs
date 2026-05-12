@@ -187,7 +187,7 @@ pub fn Hero() -> Element {
                     class: "footer",
                     style: "position: absolute; bottom: 2rem; left: 2rem; z-index: 10; text-align: left;",
                     if let Some(w) = current {
-                        p { style: "margin: 0; font-size: 14px; opacity: 0.9;", strong { style: "font-weight: 700;", "{w.author}" } " - Featured wallpaper" }
+                        p { style: "margin: 0; font-size: 14px; opacity: 0.9;", strong { style: "font-weight: 700;", "{w.author_name}" } " - Featured wallpaper" }
                         p { style: "margin: 0; font-size: 13px; opacity: 0.6; margin-top: 2px;", "{w.title}" }
                     }
                 }
