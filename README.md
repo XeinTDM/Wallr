@@ -28,8 +28,9 @@ graph TD
     H[User Search] --> B
     B -->|Query DB/Tantivy| DB
     B -->|Fetch/Convert| E
+```
 
-📦 Tech Stack
+## 📦 Tech Stack
 
   - Web Framework: axum + tokio (for maximum async throughput).
   - Image Processing: fast_image_resize (SIMD-accelerated resizing) + image
