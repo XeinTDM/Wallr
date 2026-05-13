@@ -50,6 +50,11 @@ bk-tree = "0.5.0"
 pdqhash = "0.1.1"
 aws-config = { version = "1.1", optional = true }
 aws-sdk-s3 = { version = "1.21", optional = true }
+regex = { version = "1.12.3", optional = true }
+strsim = { version = "0.11.1", optional = true }
+unicode-segmentation = { version = "1.13.2", optional = true }
+decancer = { version = "3.3.3", optional = true }
+unicode-normalization = { version = "0.1.25", optional = true }
 
 [features]
 server = [
@@ -88,7 +93,12 @@ server = [
     "dep:oauth2",
     "dep:img_hash",
     "dep:aws-config",
-    "dep:aws-sdk-s3"
+    "dep:aws-sdk-s3",
+    "dep:regex",
+    "dep:strsim",
+    "dep:unicode-segmentation",
+    "dep:decancer",
+    "dep:unicode-normalization"
 ]
 http = ["dep:http"]
 axum = ["dep:axum"]
@@ -99,3 +109,8 @@ tokio = ["dep:tokio"]
 reqwest = ["dep:reqwest"]
 rustrict = ["dep:rustrict"]
 oauth2 = ["dep:oauth2"]
+regex = ["dep:regex"]
+strsim = ["dep:strsim"]
+unicode-segmentation = ["dep:unicode-segmentation"]
+decancer = ["dep:decancer"]
+unicode-normalization = ["dep:unicode-normalization"]

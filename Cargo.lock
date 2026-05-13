@@ -101,6 +101,7 @@ dependencies = [
  "chrono",
  "cookie",
  "deadpool-redis",
+ "decancer",
  "dioxus",
  "dioxus-fullstack",
  "fast_image_resize",
@@ -116,6 +117,7 @@ dependencies = [
  "rand 0.10.1",
  "ravif 0.11.20",
  "redis",
+ "regex",
  "reqwest 0.13.3",
  "rgb",
  "rustrict",
@@ -124,11 +126,14 @@ dependencies = [
  "server_fn",
  "sha2 0.10.9",
  "sqlx",
+ "strsim 0.11.1",
  "tar",
  "thiserror 1.0.69",
  "tokenizers 0.23.1",
  "tokio",
  "tokio-util",
+ "unicode-normalization",
+ "unicode-segmentation",
  "urlencoding",
  "uuid",
 ]
@@ -2046,6 +2051,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 dependencies = [
  "tokio",
+]
+
+[[package]]
+name = "decancer"
+version = "3.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9244323129647178bf41ac861a2cdb9d9c81b9b09d3d0d1de9cd302b33b8a1d"
+dependencies = [
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]

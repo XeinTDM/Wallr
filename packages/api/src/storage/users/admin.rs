@@ -152,3 +152,17 @@ pub async fn admin_ban_user_db(user_id: &str, banned: bool) -> anyhow::Result<()
 
     Ok(())
 }
+
+pub async fn admin_anonymize_user_db(user_id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE users SET name = 'Anonymous', bio = '', pfp_url = NULL, banner_url = NULL, social_links = NULL WHERE id = $1",
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
+    get_user_cache().remove(user_id).await;
+
+    Ok(())
+}

@@ -282,3 +282,16 @@ where
 
     Ok(std::sync::Arc::new(results))
 }
+
+pub async fn freeze_user_wallpapers_db(user_id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE wallpapers SET is_private = true WHERE author_id = $1",
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
+    crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
+    Ok(())
+}

@@ -22,3 +22,4 @@ packages/web/assets/uploads/*
 packages/desktop/.desktop/
 packages/desktop/.desktop_data/
 .gemini/
+.sqlx/
