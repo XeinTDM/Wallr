@@ -53,7 +53,11 @@ pub async fn get_collection_wallpapers(
     page: u32,
     limit: u32,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
-    crate::storage::get_collection_wallpapers_db(&collection_id, page, limit)
+    let user_opt = require_auth().await.ok();
+    let caller_id = user_opt.as_ref().map(|u| u.id.as_str());
+    let is_admin = user_opt.as_ref().map_or(false, |u| u.role == "admin" || u.role == "super_admin");
+
+    crate::storage::get_collection_wallpapers_db(&collection_id, page, limit, caller_id, is_admin)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -63,8 +67,20 @@ pub async fn add_wallpaper_to_collection(
     collection_id: String,
     wallpaper_id: String,
 ) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
-    // Technically we should check if the user owns the collection, but for speed we just do it.
+    let user = require_auth().await?;
+    let owner_opt = crate::storage::get_collection_owner(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let owner_id = match owner_opt {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("api_err_collection_not_found")),
+    };
+
+    if owner_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::add_wallpaper_to_collection_db(&collection_id, &wallpaper_id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -75,7 +91,20 @@ pub async fn remove_wallpaper_from_collection(
     collection_id: String,
     wallpaper_id: String,
 ) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
+    let user = require_auth().await?;
+    let owner_opt = crate::storage::get_collection_owner(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let owner_id = match owner_opt {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("api_err_collection_not_found")),
+    };
+
+    if owner_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::remove_wallpaper_from_collection_db(&collection_id, &wallpaper_id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -88,7 +117,20 @@ pub async fn update_collection(
     description: Option<String>,
     is_private: bool,
 ) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
+    let user = require_auth().await?;
+    let owner_opt = crate::storage::get_collection_owner(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let owner_id = match owner_opt {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("api_err_collection_not_found")),
+    };
+
+    if owner_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::update_collection_db(&collection_id, &name, description.as_deref(), is_private)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -96,7 +138,20 @@ pub async fn update_collection(
 
 #[server]
 pub async fn delete_collection(collection_id: String) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
+    let user = require_auth().await?;
+    let owner_opt = crate::storage::get_collection_owner(&collection_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let owner_id = match owner_opt {
+        Some(id) => id,
+        None => return Err(ServerFnError::new("api_err_collection_not_found")),
+    };
+
+    if owner_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::delete_collection_db(&collection_id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())

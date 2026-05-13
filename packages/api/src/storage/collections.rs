@@ -108,7 +108,7 @@ pub async fn get_public_user_collections_db(
             SELECT w.thumbnail_url
             FROM collection_items ci
             JOIN wallpapers w ON w.id = ci.wallpaper_id
-            WHERE ci.collection_id = c.id
+            WHERE ci.collection_id = c.id AND w.is_private = false
             ORDER BY ci.added_at DESC
             LIMIT 1
         ) lc ON true
@@ -168,6 +168,8 @@ pub async fn get_collection_wallpapers_db(
     collection_id: &str,
     page: u32,
     limit: u32,
+    caller_id: Option<&str>,
+    is_admin: bool,
 ) -> anyhow::Result<std::sync::Arc<Vec<crate::Wallpaper>>> {
     let pool = get_pool()?;
     let offset = (page * limit) as i64;
@@ -182,13 +184,18 @@ pub async fn get_collection_wallpapers_db(
         FROM wallpapers w
         JOIN users u ON w.author_id = u.id
         JOIN collection_items ci ON ci.wallpaper_id = w.id
+        JOIN user_collections c ON c.id = ci.collection_id
         WHERE ci.collection_id = $1
+          AND ($4 = true OR c.is_private = false OR c.user_id = $5)
+          AND ($4 = true OR w.is_private = false OR w.author_id = $5)
         ORDER BY ci.added_at DESC
         LIMIT $2 OFFSET $3
         "#,
         collection_id,
         limit,
-        offset
+        offset,
+        is_admin,
+        caller_id as Option<&str>
     )
     .fetch_all(pool)
     .await?;
@@ -260,5 +267,13 @@ pub async fn delete_collection_db(collection_id: &str) -> anyhow::Result<()> {
     tx.commit().await?;
 
     Ok(())
+}
+
+pub async fn get_collection_owner(collection_id: &str) -> anyhow::Result<Option<String>> {
+    let pool = get_pool()?;
+    let row = sqlx::query!("SELECT user_id FROM user_collections WHERE id = $1", collection_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.user_id))
 }
 

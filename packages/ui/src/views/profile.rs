@@ -62,7 +62,7 @@ pub fn Profile() -> Element {
                 style: "padding-top: var(--nav-height, 68px);",
 
                 ProfileHeader {
-                    user: user_data.clone(),
+                    user: api::PublicUser::from(user_data.clone()),
                     is_owner: true,
                     latest_upload_url,
                     on_followers_click: move |_| {
@@ -376,7 +376,7 @@ pub fn render_profile_tab(
 
 #[derive(Props, Clone, PartialEq)]
 pub struct ProfileHeaderProps {
-    pub user: api::User,
+    pub user: api::PublicUser,
     pub is_owner: bool,
     pub latest_upload_url: Option<String>,
     pub on_followers_click: EventHandler<()>,
@@ -532,8 +532,6 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                             "{props.user.name}"
                         }
                         div { style: "color: var(--text-secondary); font-size: 15px; display: flex; align-items: center; gap: 12px;",
-                            span { "{props.user.email}" }
-                            span { style: "opacity: 0.5;", "•" }
                             button {
                                 class: "glow-hover-text",
                                 style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",

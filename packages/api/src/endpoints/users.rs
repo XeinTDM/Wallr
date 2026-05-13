@@ -84,12 +84,12 @@ pub async fn delete_account() -> Result<(), ServerFnError> {
 }
 
 #[server]
-pub async fn get_public_profile(username: String) -> Result<Option<User>, ServerFnError> {
+pub async fn get_public_profile(username: String) -> Result<Option<PublicUser>, ServerFnError> {
     let username = username.replace("-", " ");
     let user_record_opt = crate::storage::get_user_by_name(&username)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
-    Ok(user_record_opt.map(|ur| ur.user))
+    Ok(user_record_opt.map(|ur| PublicUser::from(ur.user)))
 }
 
 #[server]
@@ -105,9 +105,10 @@ pub async fn get_public_uploads(
 }
 
 #[server]
-pub async fn search_users_endpoint(query: String, limit: u32) -> Result<Vec<User>, ServerFnError> {
+pub async fn search_users_endpoint(query: String, limit: u32) -> Result<Vec<PublicUser>, ServerFnError> {
     crate::storage::search_users(&query, limit)
         .await
+        .map(|users| users.into_iter().map(PublicUser::from).collect())
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
 
@@ -135,6 +136,22 @@ pub async fn set_active_playlist(
     interval_secs: Option<i32>,
 ) -> Result<(), ServerFnError> {
     let user = require_auth().await?;
+    
+    if let Some(ref col_id) = collection_id {
+        let owner_opt = crate::storage::collections::get_collection_owner(col_id)
+            .await
+            .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+            
+        let owner_id = match owner_opt {
+            Some(id) => id,
+            None => return Err(ServerFnError::new("api_err_collection_not_found")),
+        };
+        
+        if owner_id != user.id && user.role != "admin" && user.role != "super_admin" {
+            return Err(ServerFnError::new("api_err_unauthorized"));
+        }
+    }
+
     crate::storage::users::update_user_playlist(&user.id, collection_id.as_deref(), interval_secs)
         .await
         .map_err(ServerFnError::new)?;
@@ -150,9 +167,11 @@ pub async fn get_active_playlist_items() -> Result<(Vec<Wallpaper>, i32), Server
     
     let db_user = db_user.ok_or_else(|| ServerFnError::new("User not found"))?;
     let interval = db_user.user.playlist_interval_secs;
+    let caller_id = Some(db_user.user.id.as_str());
+    let is_admin = db_user.user.role == "admin" || db_user.user.role == "super_admin";
     
     if let Some(col_id) = db_user.user.active_playlist_id {
-        let items = crate::storage::collections::get_collection_wallpapers_db(&col_id, 0, 100)
+        let items = crate::storage::collections::get_collection_wallpapers_db(&col_id, 0, 100, caller_id, is_admin)
             .await
             .map_err(ServerFnError::new)?;
         Ok((items.to_vec(), interval))

@@ -46,6 +46,26 @@ fn main() {
                 return (StatusCode::BAD_REQUEST, "Invalid ID".to_string()).into_response();
             }
 
+            let mut is_private = false;
+            if let Ok(Some(wp)) = api::storage::get_wallpaper_by_id(&id).await {
+                is_private = wp.is_private;
+                if wp.is_private {
+                    let mut authorized = false;
+                    if let Some(token_str) = extract_session_token(&headers) {
+                        if let Ok(user) = api::storage::verify_token(&token_str).await {
+                            if user.id == wp.author_id || user.role == "admin" || user.role == "super_admin" {
+                                authorized = true;
+                            }
+                        }
+                    }
+                    if !authorized {
+                        return (StatusCode::FORBIDDEN, "Access denied to private wallpaper").into_response();
+                    }
+                }
+            } else {
+                return (StatusCode::NOT_FOUND, "Wallpaper not found").into_response();
+            }
+
             let mut format = query
                 .format
                 .unwrap_or_else(|| "avif".to_string())
@@ -53,9 +73,21 @@ fn main() {
             if format == "jpeg" {
                 format = "jpg".to_string();
             }
-            let width = query.width;
-            let height = query.height;
+            let mut width = query.width;
+            let mut height = query.height;
             let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
+
+            // Enforce dimension caps to prevent DoS (max 8k resolution)
+            if let Some(w) = width {
+                if w > 7680 {
+                    width = Some(7680);
+                }
+            }
+            if let Some(h) = height {
+                if h > 4320 {
+                    height = Some(4320);
+                }
+            }
 
             let mut ip = "unknown".to_string();
             if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
@@ -91,18 +123,43 @@ fn main() {
             let public_url = std::env::var("R2_PUBLIC_URL").unwrap_or_else(|_| "https://cdn.example.com".to_string());
             let is_native_format = format == "avif" || format == "jpg" || format == "png";
 
+            let content_type = match format.as_str() {
+                "jpg" | "jpeg" => "image/jpeg",
+                "png" => "image/png",
+                "avif" => "image/avif",
+                _ => "application/octet-stream",
+            };
+
             if width.is_none() && height.is_none() && is_native_format {
                 let target_url = format!("{}/{}_master.{}", public_url, id, format);
-                return Redirect::temporary(&target_url).into_response();
+                if is_private {
+                    if let Ok(resp) = reqwest::get(&target_url).await {
+                        if resp.status().is_success() {
+                            if let Ok(bytes) = resp.bytes().await {
+                                return (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
+                            }
+                        }
+                    }
+                    return (StatusCode::NOT_FOUND, "Private source image not found on CDN").into_response();
+                } else {
+                    return Redirect::temporary(&target_url).into_response();
+                }
             }
 
             let variant_suffix = format!("{}x{}_{}", width.unwrap_or(0), height.unwrap_or(0), crop_val);
             let variant_url = format!("{}/{}_{}.{}", public_url, id, variant_suffix, format);
 
-            if let Ok(resp) = reqwest::get(&variant_url).await
-                && resp.status().is_success() {
-                    return Redirect::temporary(&variant_url).into_response();
+            if let Ok(resp) = reqwest::get(&variant_url).await {
+                if resp.status().is_success() {
+                    if is_private {
+                        if let Ok(bytes) = resp.bytes().await {
+                            return (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
+                        }
+                    } else {
+                        return Redirect::temporary(&variant_url).into_response();
+                    }
                 }
+            }
 
             static CONVERSION_SEMAPHORE: std::sync::LazyLock<tokio::sync::Semaphore> = std::sync::LazyLock::new(|| tokio::sync::Semaphore::new(4));
             let _permit = match CONVERSION_SEMAPHORE.acquire().await {
@@ -237,7 +294,13 @@ fn main() {
             };
 
             match api::storage::save_image_file(&id, &variant_suffix, &format, &out_bytes).await {
-                Ok(new_url) => Redirect::temporary(&new_url).into_response(),
+                Ok(new_url) => {
+                    if is_private {
+                        (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], out_bytes).into_response()
+                    } else {
+                        Redirect::temporary(&new_url).into_response()
+                    }
+                },
                 Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to upload variant: {}", e)).into_response(),
             }
         }
@@ -251,18 +314,25 @@ fn main() {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("Untitled")
                 .to_string();
-            let (author_id, author_name) = {
-                let token = extract_session_token(&headers);
 
+            let auth_user = {
+                let token = extract_session_token(&headers);
                 if let Some(token_str) = token {
-                    api::storage::verify_token(&token_str)
-                        .await
-                        .map(|u| (u.id, u.name))
-                        .unwrap_or_else(|_| ("".to_string(), "Anonymous".to_string()))
+                    api::storage::verify_token(&token_str).await.ok()
                 } else {
-                    ("".to_string(), "Anonymous".to_string())
+                    None
                 }
             };
+
+            let (author_id, author_name) = match auth_user {
+                Some(u) => (u.id, u.name),
+                None => {
+                    let mut res = axum::response::Response::new("Unauthorized".into());
+                    *res.status_mut() = axum::http::StatusCode::UNAUTHORIZED;
+                    return res;
+                }
+            };
+
             let user_tags: Vec<String> = headers
                 .get("X-Tags")
                 .and_then(|v| v.to_str().ok())
@@ -441,12 +511,12 @@ fn main() {
                     "/assets/uploads",
                     tower_http::services::ServeDir::new("packages/ui/assets/uploads"),
                 )
-                .route("/api/upload_raw", post(upload_raw_handler))
-                .route("/api/upload_media", post(upload_media_handler))
+                .route("/api/upload_raw", post(upload_raw_handler).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
+                .route("/api/upload_media", post(upload_media_handler).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
                 .route("/api/export_data", get(export_data_handler))
                 .nest("/api/oauth", api::oauth::oauth_router())
                 .route("/wallpaper/{id}/download", get(download_handler))
-                .layer(DefaultBodyLimit::disable());
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024));
             Ok(app)
         });
     }

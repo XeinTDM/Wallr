@@ -121,7 +121,7 @@ pub fn FollowsModal(props: FollowsModalProps) -> Element {
 
 #[derive(Props, Clone, PartialEq)]
 struct UserListItemProps {
-    user: User,
+    user: api::PublicUser,
     on_click: EventHandler<MouseEvent>,
 }
 

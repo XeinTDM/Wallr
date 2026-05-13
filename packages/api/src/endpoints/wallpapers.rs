@@ -34,9 +34,20 @@ pub async fn get_wallpapers_by_tag(
 
 #[server]
 pub async fn get_wallpaper_by_id(id: String) -> Result<Option<Wallpaper>, ServerFnError> {
-    crate::storage::get_wallpaper_by_id(&id)
+    let wp_opt = crate::storage::get_wallpaper_by_id(&id)
         .await
-        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    if let Some(ref wp) = wp_opt {
+        if wp.is_private {
+            let user = require_auth().await?;
+            if wp.author_id != user.id && user.role != "admin" {
+                return Err(ServerFnError::new("api_err_unauthorized"));
+            }
+        }
+    }
+
+    Ok(wp_opt)
 }
 
 #[server]
@@ -119,7 +130,20 @@ pub async fn update_wallpaper(
     tags: Vec<String>,
     is_private: bool,
 ) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
+    let user = require_auth().await?;
+    let wp_opt = crate::storage::get_wallpaper_by_id(&id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let wp = match wp_opt {
+        Some(w) => w,
+        None => return Err(ServerFnError::new("api_err_wp_not_found")),
+    };
+
+    if wp.author_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::update_wallpaper_db(&id, &title, &tags, is_private)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -127,7 +151,20 @@ pub async fn update_wallpaper(
 
 #[server]
 pub async fn delete_my_wallpaper(id: String) -> Result<(), ServerFnError> {
-    let _user = require_auth().await?;
+    let user = require_auth().await?;
+    let wp_opt = crate::storage::get_wallpaper_by_id(&id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    let wp = match wp_opt {
+        Some(w) => w,
+        None => return Err(ServerFnError::new("api_err_wp_not_found")),
+    };
+
+    if wp.author_id != user.id && user.role != "admin" {
+        return Err(ServerFnError::new("api_err_unauthorized"));
+    }
+
     crate::storage::delete_wallpaper(&id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())

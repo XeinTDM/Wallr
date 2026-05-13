@@ -67,6 +67,29 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PublicUser {
+    pub id: String,
+    pub name: String,
+    pub pfp_url: String,
+    pub banner_url: Option<String>,
+    pub bio: Option<String>,
+    pub social_links: Option<std::collections::HashMap<String, String>>,
+}
+
+impl From<User> for PublicUser {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id,
+            name: user.name,
+            pfp_url: user.pfp_url,
+            banner_url: user.banner_url,
+            bio: user.bio,
+            social_links: user.social_links,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CreatorAnalytics {
     pub total_uploads: u32,
     pub total_likes: u32,

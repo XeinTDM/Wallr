@@ -104,7 +104,7 @@ pub async fn get_followers(
     username: String,
     page: u32,
     limit: u32,
-) -> Result<Vec<User>, ServerFnError> {
+) -> Result<Vec<PublicUser>, ServerFnError> {
     let limit_i64 = limit as i64;
     let offset_i64 = (page * limit) as i64;
 
@@ -117,7 +117,7 @@ pub async fn get_followers(
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
-    Ok(followers.into_iter().map(|u| u.user).collect())
+    Ok(followers.into_iter().map(|u| PublicUser::from(u.user)).collect())
 }
 
 #[server]
@@ -125,7 +125,7 @@ pub async fn get_following(
     username: String,
     page: u32,
     limit: u32,
-) -> Result<Vec<User>, ServerFnError> {
+) -> Result<Vec<PublicUser>, ServerFnError> {
     let limit_i64 = limit as i64;
     let offset_i64 = (page * limit) as i64;
 
@@ -138,11 +138,11 @@ pub async fn get_following(
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
-    Ok(following.into_iter().map(|u| u.user).collect())
+    Ok(following.into_iter().map(|u| PublicUser::from(u.user)).collect())
 }
 
 #[server]
-pub async fn get_suggested_users(limit: u32) -> Result<Vec<User>, ServerFnError> {
+pub async fn get_suggested_users(limit: u32) -> Result<Vec<PublicUser>, ServerFnError> {
     let user = require_auth().await?;
     let limit_i64 = limit as i64;
     
@@ -150,7 +150,7 @@ pub async fn get_suggested_users(limit: u32) -> Result<Vec<User>, ServerFnError>
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
-    Ok(suggested.into_iter().map(|u| u.user).collect())
+    Ok(suggested.into_iter().map(|u| PublicUser::from(u.user)).collect())
 }
 
 
