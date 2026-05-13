@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 /// Fetch a list of trending wallpapers from the server.
 #[server]
@@ -149,11 +150,10 @@ pub async fn get_upload_status(job_id: String) -> Result<Option<UploadJob>, Serv
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
     
-    if let Some(ref j) = job {
-        if j.user_id != user.id && user.role != "admin" {
+    if let Some(ref j) = job
+        && j.user_id != user.id && user.role != "admin" {
             return Err(ServerFnError::new("api_err_unauthorized"));
         }
-    }
     
     Ok(job)
 }

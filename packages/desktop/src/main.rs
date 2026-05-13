@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ui::app::{AuthState, Route};
+use ui::app::Route;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 

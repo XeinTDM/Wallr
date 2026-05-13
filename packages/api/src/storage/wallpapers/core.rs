@@ -255,9 +255,16 @@ where
 {
     let list_cache = crate::storage::cache::get_wallpaper_list_cache();
     if let Some(cached_ids) = list_cache.get(&cache_key).await {
-        let mut results = Vec::with_capacity(cached_ids.len());
+        let mut handles = Vec::with_capacity(cached_ids.len());
         for id in cached_ids {
-            if let Ok(Some(wp)) = get_wallpaper_by_id(&id).await {
+            handles.push(tokio::spawn(async move {
+                crate::storage::wallpapers::get_wallpaper_by_id(&id).await
+            }));
+        }
+        
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            if let Ok(Ok(Some(wp))) = handle.await {
                 results.push(wp);
             }
         }

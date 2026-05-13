@@ -1,5 +1,6 @@
 use crate::models::*;
 use dioxus::prelude::*;
+use crate::auth::*;
 
 #[server]
 pub async fn get_my_notifications() -> Result<Vec<Notification>, ServerFnError> {

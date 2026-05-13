@@ -133,18 +133,17 @@ pub fn Home() -> Element {
                 crate::WallpaperGrid {
                     key: "{\"trending-grid\"}",
                     wallpapers: trending_wallpapers,
-                    is_loading: _fetch_more_trending().is_none() && !trending_cursor().is_none(),
+                    is_loading: _fetch_more_trending().is_none() && trending_cursor().is_some(),
                     on_end_reached: move |_| {
-                        if trending_has_more() {
-                            if let Some(last) = trending_wallpapers().last() {
+                        if trending_has_more()
+                            && let Some(last) = trending_wallpapers().last() {
                                 trending_cursor
                                     .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
                             }
-                        }
                     },
                 }
             } else {
-                if following_wallpapers().is_empty() && !_fetch_more_following().is_none() {
+                if following_wallpapers().is_empty() && _fetch_more_following().is_some() {
                     div { style: "text-align: center; padding: 4rem 2rem; color: #888;",
                         p { "You aren't following anyone yet, or they haven't posted any wallpapers." }
                         
@@ -179,14 +178,13 @@ pub fn Home() -> Element {
                     crate::WallpaperGrid {
                         key: "{\"following-grid\"}",
                         wallpapers: following_wallpapers,
-                        is_loading: _fetch_more_following().is_none() && !following_cursor().is_none(),
+                        is_loading: _fetch_more_following().is_none() && following_cursor().is_some(),
                         on_end_reached: move |_| {
-                            if following_has_more() {
-                                if let Some(last) = following_wallpapers().last() {
+                            if following_has_more()
+                                && let Some(last) = following_wallpapers().last() {
                                     following_cursor
                                         .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
                                 }
-                            }
                         },
                     }
                 }

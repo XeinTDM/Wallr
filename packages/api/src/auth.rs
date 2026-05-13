@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use crate::models::{User, UserRecord};
 
 #[cfg(feature = "server")]
 fn extract_client_ip(

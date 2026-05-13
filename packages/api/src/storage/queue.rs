@@ -25,8 +25,8 @@ pub async fn start_worker_loop() {
             if let Ok(mut conn) = pool.get().await {
                 // brpop blocks until an item is available, timeout 0 = infinite
                 let res: redis::RedisResult<(String, String)> = conn.brpop("wallr:queue:uploads", 0.0).await;
-                if let Ok((_, json)) = res {
-                    if let Ok(payload) = serde_json::from_str::<UploadJobPayload>(&json) {
+                if let Ok((_, json)) = res
+                    && let Ok(payload) = serde_json::from_str::<UploadJobPayload>(&json) {
                         let bytes_key = format!("wallr:upload:bytes:{}", payload.id);
                         let bytes_res: redis::RedisResult<Vec<u8>> = conn.get(&bytes_key).await;
                         let _: redis::RedisResult<()> = conn.del(&bytes_key).await;
@@ -43,7 +43,6 @@ pub async fn start_worker_loop() {
                             let _ = crate::storage::wallpapers::core::update_upload_job_status(&payload.id, "failed", Some("Upload bytes expired or not found in Redis")).await;
                         }
                     }
-                }
             }
         } else {
             // If Redis pool isn't ready, sleep briefly to prevent tight loop

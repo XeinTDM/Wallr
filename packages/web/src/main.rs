@@ -95,7 +95,7 @@ fn main() {
 
             if width.is_none() && height.is_none() && is_native_format {
                 let target_url = format!("{}/{}_master.{}", public_url, id, format);
-                return Redirect::found(&target_url).into_response();
+                return Redirect::temporary(&target_url).into_response();
             }
 
             let variant_suffix = format!("{}x{}_{}", width.unwrap_or(0), height.unwrap_or(0), crop_val);
@@ -103,7 +103,7 @@ fn main() {
 
             if let Ok(resp) = reqwest::get(&variant_url).await {
                 if resp.status().is_success() {
-                    return Redirect::found(&variant_url).into_response();
+                    return Redirect::temporary(&variant_url).into_response();
                 }
             }
 
@@ -235,7 +235,7 @@ fn main() {
             };
 
             match api::storage::save_image_file(&id, &variant_suffix, &format, &out_bytes).await {
-                Ok(new_url) => Redirect::found(&new_url).into_response(),
+                Ok(new_url) => Redirect::temporary(&new_url).into_response(),
                 Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to upload variant: {}", e)).into_response(),
             }
         }

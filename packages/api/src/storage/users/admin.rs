@@ -112,9 +112,16 @@ pub async fn admin_bulk_delete_users_db(
             .await?
     };
 
+    let mut handles = Vec::with_capacity(users_to_delete.len());
+    for user_id in users_to_delete {
+        handles.push(tokio::spawn(async move {
+            crate::storage::users::delete_user(&user_id).await.is_ok()
+        }));
+    }
+
     let mut deleted_count = 0;
-    for user_id in &users_to_delete {
-        if crate::storage::users::delete_user(user_id).await.is_ok() {
+    for handle in handles {
+        if let Ok(true) = handle.await {
             deleted_count += 1;
         }
     }

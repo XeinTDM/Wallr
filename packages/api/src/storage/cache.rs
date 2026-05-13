@@ -43,26 +43,24 @@ impl<V: Serialize + DeserializeOwned + Send + Sync + 'static> RedisCache<V> {
 
     #[cfg(feature = "server")]
     pub async fn insert(&self, key: String, value: V) {
-        if let Ok(pool) = crate::storage::get_redis_pool() {
-            if let Ok(mut conn) = pool.get().await {
+        if let Ok(pool) = crate::storage::get_redis_pool()
+            && let Ok(mut conn) = pool.get().await {
                 let redis_key = format!("{}:{}", self.prefix, key);
                 if let Ok(data) = serde_json::to_string(&value) {
                     let _: redis::RedisResult<()> = conn.set_ex(&redis_key, data, self.ttl_secs).await;
                 }
             }
-        }
     }
     #[cfg(not(feature = "server"))]
     pub async fn insert(&self, _key: String, _value: V) {}
 
     #[cfg(feature = "server")]
     pub async fn remove(&self, key: &str) {
-        if let Ok(pool) = crate::storage::get_redis_pool() {
-            if let Ok(mut conn) = pool.get().await {
+        if let Ok(pool) = crate::storage::get_redis_pool()
+            && let Ok(mut conn) = pool.get().await {
                 let redis_key = format!("{}:{}", self.prefix, key);
                 let _: redis::RedisResult<()> = conn.del(&redis_key).await;
             }
-        }
     }
     #[cfg(not(feature = "server"))]
     pub async fn remove(&self, _key: &str) {}
@@ -71,8 +69,8 @@ impl<V: Serialize + DeserializeOwned + Send + Sync + 'static> RedisCache<V> {
     pub fn invalidate_all(&self) {
         let prefix = self.prefix;
         tokio::spawn(async move {
-            if let Ok(pool) = crate::storage::get_redis_pool() {
-                if let Ok(mut conn) = pool.get().await {
+            if let Ok(pool) = crate::storage::get_redis_pool()
+                && let Ok(mut conn) = pool.get().await {
                     let pattern = format!("{}:*", prefix);
                     let mut keys_to_delete = Vec::new();
                     {
@@ -88,7 +86,6 @@ impl<V: Serialize + DeserializeOwned + Send + Sync + 'static> RedisCache<V> {
                         let _: redis::RedisResult<()> = conn.del(chunk).await;
                     }
                 }
-            }
         });
     }
     #[cfg(not(feature = "server"))]

@@ -92,17 +92,17 @@ pub fn Explore(tag: String) -> Element {
             breadcrumb: "Explore",
             category,
             resolution,
-            sort: sort.clone(),
+            sort: sort,
             aspect_ratio,
             color,
             ai_filter,
             timeframe,
             WallpaperGrid {
                 wallpapers: all_wallpapers,
-                is_loading: _fetch().is_none() && (!cursor().is_none() || all_wallpapers().is_empty()),
+                is_loading: _fetch().is_none() && (cursor().is_some() || all_wallpapers().is_empty()),
                 on_end_reached: move |_| {
-                    if has_more() {
-                        if let Some(last) = all_wallpapers().last() {
+                    if has_more()
+                        && let Some(last) = all_wallpapers().last() {
                             let val = match sort().as_str() {
                                 "downloads" => last.downloads.to_string(),
                                 "rating" => last.likes.to_string(),
@@ -110,7 +110,6 @@ pub fn Explore(tag: String) -> Element {
                             };
                             cursor.set(Some(format!("{},{}", val, last.id)));
                         }
-                    }
                 },
                 empty_message: "No wallpapers found in this category yet.".to_string(),
                 empty_submessage: "Try exploring other categories or check back later!".to_string(),
