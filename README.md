@@ -12,22 +12,28 @@ A hyper-optimized, pure-Rust backend for a next-generation wallpaper platform. T
 
 ```mermaid
 graph TD
-    A[Client Upload] --> B(Axum Web Server)
-    B --> C{Image Processor}
+    A[Client Upload] -->|PASETO Auth| B(Axum Web Server)
+    B -->|Queue Job| R[(Redis)]
+    R --> W[Rust Background Worker]
+    
+    W -->|pdqhash| Dedup{Duplicate?}
+    Dedup -->|Yes| Drop[Reject / Drop]
+    Dedup -->|No| C{Image Processor}
     
     C -->|Downscale & Quantize| D[Color Extractor]
     D -->|Hex Codes| DB[(Database)]
     
     C -->|Format| E[AVIF Encoder]
-    E -->|Storage| S3[(Object Storage)]
+    E -->|Master + Thumbnails| S3[(Object Storage)]
     
     C -->|Resize 224x224| F[AI Pipeline]
     F -->|Candle| G[CLIP Model]
     G -->|Zero-Shot Tags| DB
     
-    H[User Search] --> B
+    H[User Client] --> CDN((Edge CDN))
+    CDN -->|Cache Miss| B
     B -->|Query DB| DB
-    B -->|Fetch/Convert| E
+    B -->|Fetch/Convert Legacy| S3
 ```
 
 ## 📦 Tech Stack
@@ -39,8 +45,12 @@ graph TD
 
 ### Backend
 - **Web Framework:** axum + tokio & Dioxus Server Functions (for maximum async throughput).
+- **Security & Auth:** PASETO tokens (`pasetors`), Argon2 hashing, and content filtering (`rustrict`).
+- **Deduplication:** Perceptual image hashing (`pdqhash`, `img_hash`) and `bk-tree` for fast collision lookups.
 - **Database:** PostgreSQL (with sqlx for compile-time verified queries).
+- **Queue & Cache:** Redis (for async background workers and caching).
 - **Image Processing:** fast_image_resize (SIMD-accelerated) + image crate.
 - **AVIF Encoding:** ravif (pure Rust AVIF encoder, insanely fast).
 - **AI Inference:** candle-core & candle-nn (Hugging Face's minimalist ML framework for Rust).
 - **Color Extraction:** Custom K-Means clustering (SIMD optimized) on 64x64 thumbnails.
+- **Edge Delivery:** Global CDN for aggressively caching image formats.
