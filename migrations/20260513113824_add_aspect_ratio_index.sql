@@ -1,0 +1,1 @@
+CREATE INDEX idx_wallpapers_aspect_ratio ON wallpapers ((width::float / height::float));
