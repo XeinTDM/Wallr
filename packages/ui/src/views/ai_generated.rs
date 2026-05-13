@@ -14,8 +14,7 @@ pub fn AiGenerated() -> Element {
     let timeframe = use_signal(String::new);
 
     let initial_res = use_server_future(move || async move {
-        let mut filters = api::FilterOptions::default();
-        filters.ai_filter = "only".to_string();
+        let filters = api::FilterOptions { ai_filter: "only".to_string(), ..Default::default() };
         api::get_wallpapers_by_tag("ai-generated".to_string(), None, 20, filters).await.unwrap_or_default()
     })?;
 
@@ -35,9 +34,7 @@ pub fn AiGenerated() -> Element {
         };
         async move {
             let c = cursor();
-            let mut default_filters = api::FilterOptions::default();
-            default_filters.sort = "rating".to_string();
-            default_filters.ai_filter = "only".to_string();
+            let default_filters = api::FilterOptions { sort: "rating".to_string(), ai_filter: "only".to_string(), ..Default::default() };
             if c.is_none() && current_cat.is_empty() && filters == default_filters {
                 return;
             }

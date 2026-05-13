@@ -33,8 +33,7 @@ pub fn LiveWallpapers() -> Element {
         };
         async move {
             let c = cursor();
-            let mut default_filters = api::FilterOptions::default();
-            default_filters.sort = "rating".to_string();
+            let default_filters = api::FilterOptions { sort: "rating".to_string(), ..Default::default() };
             
             if c.is_none() && current_cat.is_empty() && filters == default_filters {
                 return;

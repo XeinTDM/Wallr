@@ -235,11 +235,15 @@ pub async fn search_wallpapers_db(
 
         let mut embed_opt = None;
         if !query_cloned.is_empty()
-            && let Some(tagger) = crate::ai::TAGGER.get()
-            && let Ok(embed) = tagger.get_text_embedding(&query_cloned)
-        {
-            embed_opt = Some(pgvector::Vector::from(embed));
-        }
+            && let Some(tagger) = crate::ai::TAGGER.get() {
+                let q_clone_for_ai = query_cloned.clone();
+                let embed_res = tokio::task::spawn_blocking(move || {
+                    tagger.get_text_embedding(&q_clone_for_ai)
+                }).await;
+                if let Ok(Ok(embed)) = embed_res {
+                    embed_opt = Some(pgvector::Vector::from(embed));
+                }
+            }
 
         let mut q = sqlx::QueryBuilder::new(
             "SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1",
@@ -378,8 +382,11 @@ pub async fn get_similar_wallpapers_db(
             collab AS (
                 SELECT f2.wallpaper_id, COUNT(*) as collab_score
                 FROM recent_favs f1
-                JOIN user_favorites f2 ON f1.user_id = f2.user_id
-                WHERE f2.wallpaper_id != $1
+                CROSS JOIN LATERAL (
+                    SELECT wallpaper_id FROM user_favorites
+                    WHERE user_id = f1.user_id AND wallpaper_id != $1
+                    LIMIT 50
+                ) f2
                 GROUP BY f2.wallpaper_id
             ),
             recent_downs AS (
@@ -388,8 +395,11 @@ pub async fn get_similar_wallpapers_db(
             collab_down AS (
                 SELECT d2.wallpaper_id, COUNT(*) as collab_score
                 FROM recent_downs d1
-                JOIN user_downloads d2 ON d1.user_id = d2.user_id
-                WHERE d2.wallpaper_id != $1
+                CROSS JOIN LATERAL (
+                    SELECT wallpaper_id FROM user_downloads
+                    WHERE user_id = d1.user_id AND wallpaper_id != $1
+                    ORDER BY downloaded_at DESC LIMIT 50
+                ) d2
                 GROUP BY d2.wallpaper_id
             )
             SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live,

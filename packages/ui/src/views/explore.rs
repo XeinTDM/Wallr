@@ -39,8 +39,7 @@ pub fn Explore(tag: String) -> Element {
         let tag_clone = tag_for_fetch.clone();
         async move {
             let c = cursor();
-            let mut default_filters = api::FilterOptions::default();
-            default_filters.sort = "rating".to_string();
+            let default_filters = api::FilterOptions { sort: "rating".to_string(), ..Default::default() };
             
             if c.is_none() && current_cat == tag_clone && filters == default_filters {
                 return;

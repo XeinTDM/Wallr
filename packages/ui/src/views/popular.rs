@@ -153,9 +153,7 @@ pub fn PopularGrid(period: String) -> Element {
         let period_val = _period_clone.clone();
         async move {
             let c = cursor();
-            let mut default_filters = api::FilterOptions::default();
-            default_filters.sort = "downloads".to_string();
-            default_filters.timeframe = period_val;
+            let default_filters = api::FilterOptions { sort: "downloads".to_string(), timeframe: period_val.clone(), ..Default::default() };
 
             let res = if current_cat == "all" || current_cat.is_empty() {
                 if c.is_none() && filters == default_filters {

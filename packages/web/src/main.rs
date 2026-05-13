@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ui::app::{AuthState, Route};
+use ui::app::Route;
 use ui::{Theme, Toast, ToastContainer};
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
@@ -72,22 +72,20 @@ fn main() {
                 }
             }
 
-            if ip == "unknown" {
-                if let Some(token) = extract_session_token(&headers) {
+            if ip == "unknown"
+                && let Some(token) = extract_session_token(&headers) {
                     ip = format!("session_{}", token);
                 }
-            }
 
             let download_id = id.clone();
             let download_ip = ip.clone();
             let token_opt = extract_session_token(&headers);
             tokio::spawn(async move {
                 let _ = api::storage::increment_download(&download_id, &download_ip).await;
-                if let Some(token_str) = token_opt {
-                    if let Ok(user) = api::storage::verify_token(&token_str).await {
+                if let Some(token_str) = token_opt
+                    && let Ok(user) = api::storage::verify_token(&token_str).await {
                         let _ = api::storage::record_user_download_db(&user.id, &download_id).await;
                     }
-                }
             });
 
             let public_url = std::env::var("R2_PUBLIC_URL").unwrap_or_else(|_| "https://cdn.example.com".to_string());
@@ -101,11 +99,16 @@ fn main() {
             let variant_suffix = format!("{}x{}_{}", width.unwrap_or(0), height.unwrap_or(0), crop_val);
             let variant_url = format!("{}/{}_{}.{}", public_url, id, variant_suffix, format);
 
-            if let Ok(resp) = reqwest::get(&variant_url).await {
-                if resp.status().is_success() {
+            if let Ok(resp) = reqwest::get(&variant_url).await
+                && resp.status().is_success() {
                     return Redirect::temporary(&variant_url).into_response();
                 }
-            }
+
+            static CONVERSION_SEMAPHORE: std::sync::LazyLock<tokio::sync::Semaphore> = std::sync::LazyLock::new(|| tokio::sync::Semaphore::new(4));
+            let _permit = match CONVERSION_SEMAPHORE.acquire().await {
+                Ok(p) => p,
+                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Server too busy").into_response(),
+            };
 
             let master_url_avif = format!("{}/{}_master.avif", public_url, id);
             let master_url_jpg = format!("{}/{}_master.jpg", public_url, id);
@@ -179,13 +182,12 @@ fn main() {
                             let scale = w as f64 / img.width() as f64;
                             dst_height = (img.height() as f64 * scale) as u32;
                         }
-                    } else if let Some(h) = height {
-                        if h < img.height() {
+                    } else if let Some(h) = height
+                        && h < img.height() {
                             dst_height = h;
                             let scale = h as f64 / img.height() as f64;
                             dst_width = (img.width() as f64 * scale) as u32;
                         }
-                    }
 
                     if dst_width == 0 { dst_width = 1; }
                     if dst_height == 0 { dst_height = 1; }
@@ -320,8 +322,8 @@ fn main() {
             match api::upload_media_impl(user_id.clone(), media_type, body.to_vec()).await {
                 Ok(url) => {
                     let mut res = axum::response::Response::new(url.into());
-                    if let Ok(Some(record)) = api::storage::get_user_by_id(&user_id).await {
-                        if let Ok(new_token) =
+                    if let Ok(Some(record)) = api::storage::get_user_by_id(&user_id).await
+                        && let Ok(new_token) =
                             api::storage::generate_token(&record.user, record.token_version)
                         {
                             let cookie = format!(
@@ -331,7 +333,6 @@ fn main() {
                             res.headers_mut()
                                 .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
                         }
-                    }
                     res
                 }
                 Err(e) => {
