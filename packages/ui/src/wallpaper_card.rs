@@ -16,22 +16,24 @@ pub fn WallpaperCard(props: WallpaperCardProps) -> Element {
     let mut likes_count = use_signal(|| props.wallpaper.likes);
     let mut downloads_count = use_signal(|| props.wallpaper.downloads);
     let mut has_downloaded = use_signal(|| false);
+    let mut is_hovered = use_signal(|| false);
 
     let is_liked = crate::FAVORITED_IDS.read().contains(&props.wallpaper.id);
 
     let toggle_id = props.wallpaper.id.clone();
 
     rsx! {
-        document::Stylesheet { href: CARD_CSS }
-
         div {
             class: "wallpaper-card-wrapper",
+            document::Stylesheet { href: CARD_CSS }
 
             div {
                 class: "wallpaper-card glass glow-hover",
                 style: "position: relative; overflow: hidden; border-radius: 20px; background: var(--bg-secondary); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; aspect-ratio: 16 / 10;",
+                onmouseenter: move |_| is_hovered.set(true),
+                onmouseleave: move |_| is_hovered.set(false),
 
-                if props.wallpaper.is_live {
+                if props.wallpaper.is_live && is_hovered() {
                     video {
                         src: "{crate::resolve_asset_url(&props.wallpaper.image_url)}",
                         poster: "{crate::resolve_asset_url(&props.wallpaper.thumbnail_url)}",

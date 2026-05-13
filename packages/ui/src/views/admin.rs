@@ -26,10 +26,10 @@ pub fn Admin() -> Element {
     }
 
     #[allow(unused_mut)]
-    let mut stats_res = use_resource(move || async move { get_admin_stats().await });
+    let mut stats_res = use_server_future(move || async move { get_admin_stats().await })?;
 
     #[allow(unused_mut)]
-    let mut audit_res = use_resource(move || async move { get_audit_logs(10).await });
+    let mut audit_res = use_server_future(move || async move { get_audit_logs(10).await })?;
 
     use_effect(move || {
         spawn(async move {
@@ -44,7 +44,7 @@ pub fn Admin() -> Element {
 
     rsx! {
         div {
-            class: "container fade-in",
+            class: "container",
             style: "padding: 120px 0 80px;",
 
             div {

@@ -20,7 +20,7 @@ pub fn ForgotPassword() -> Element {
 
     rsx! {
         div {
-            class: "container fade-in",
+            class: "container",
             style: "padding: 160px 0 80px; display: flex; justify-content: center;",
 
             div {

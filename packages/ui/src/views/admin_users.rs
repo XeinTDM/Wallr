@@ -28,7 +28,7 @@ pub fn AdminUsers() -> Element {
         return rsx! { div {} };
     }
 
-    let mut users_res = use_resource(move || async move { get_recent_users(50).await });
+    let mut users_res = use_server_future(move || async move { get_recent_users(50).await })?;
 
     use_effect(move || {
         spawn(async move {
@@ -42,7 +42,7 @@ pub fn AdminUsers() -> Element {
 
     rsx! {
         div {
-            class: "container fade-in",
+            class: "container",
             style: "padding: 120px 0 80px;",
 
             div {

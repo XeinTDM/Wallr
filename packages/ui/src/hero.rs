@@ -133,6 +133,7 @@ pub fn Hero() -> Element {
                                 style: "position: absolute; top: calc(100% + 8px); left: 0; right: 0; border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 1000; border: 1px solid rgba(255,255,255,0.1);",
                                 for user in suggestions.read().as_ref().unwrap_or(&vec![]).iter() {
                                     a {
+                                        key: "{user.id}",
                                         href: "/user/{user.name.replace(\" \", \"-\")}",
                                         style: "display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; text-decoration: none; color: white; transition: background 0.2s; text-align: left;",
                                         class: "menu-item-hover",
@@ -171,7 +172,7 @@ pub fn Hero() -> Element {
                             None => rsx! {
                                 for i in 0..5 {
                                     span {
-                                        key: "skeleton-{i}",
+                                        key: "hero-skeleton-{i}",
                                         class: "glass tag skeleton-pulse",
                                         style: "width: 80px; height: 32px; color: transparent;",
                                         "..."

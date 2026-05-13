@@ -1,10 +1,9 @@
 use crate::storage::get_pool;
 use crate::Wallpaper;
-use crate::storage::cache::get_wallpaper_list_cache;
 
 pub async fn get_trending_tags(limit: u32) -> anyhow::Result<Vec<String>> {
     let cache = crate::storage::cache::get_trending_tags_cache();
-    if let Some(cached) = cache.get(&limit).await {
+    if let Some(cached) = cache.get(&limit.to_string()).await {
         return Ok(cached);
     }
 
@@ -28,7 +27,7 @@ pub async fn get_trending_tags(limit: u32) -> anyhow::Result<Vec<String>> {
         tags.push(tag);
     }
 
-    cache.insert(limit, tags.clone()).await;
+    cache.insert(limit.to_string(), tags.clone()).await;
 
     Ok(tags)
 }
@@ -38,53 +37,51 @@ pub async fn get_user_uploads(
     page: u32,
     limit: u32,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
-    let cache = get_wallpaper_list_cache();
     let cache_key = format!("uploads:{}:{}:{}", author_name, page, limit);
-    if let Some(cached) = cache.get(&cache_key).await {
-        return Ok(cached);
-    }
+    let author_name_cloned = author_name.to_string();
 
-    let pool = get_pool()?;
-    let offset = page * limit;
-    let rows = sqlx::query!(
-        r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
-        WHERE u.name = $1
-        ORDER BY w.created_at DESC
-        LIMIT $2 OFFSET $3
-        "#,
-        author_name,
-        limit as i64,
-        offset as i64
-    )
-    .fetch_all(pool)
-    .await?;
+    crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
+        let pool = get_pool()?;
+        let offset = page * limit;
+        let rows = sqlx::query!(
+            r#"
+            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
+            WHERE u.name = $1
+            ORDER BY w.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+            author_name_cloned,
+            limit as i64,
+            offset as i64
+        )
+        .fetch_all(pool)
+        .await?;
 
-    let results: Vec<Wallpaper> = rows
-        .into_iter()
-        .map(|r| Wallpaper {
-            id: r.id,
-            title: r.title,
-            author_id: r.author_id,
-            author_name: r.author_name,
-            image_url: r.image_url,
-            thumbnail_url: r.thumbnail_url,
-            tags: r.tags.0,
-            primary_colors: r.primary_colors.0,
-            dimensions: (r.width as u32, r.height as u32),
-            size_bytes: r.size_bytes as u64,
-            likes: r.likes.unwrap_or(0) as u32,
-            downloads: r.downloads.unwrap_or(0) as u32,
-            created_at: r.created_at,
-            is_private: r.is_private,
-            is_live: r.is_live,
-            embedding: None,
-            phash: None,
-        })
-        .collect();
-    let arc_results = std::sync::Arc::new(results);
-    cache.insert(cache_key, arc_results.clone()).await;
-    Ok(arc_results)
+        let results: Vec<Wallpaper> = rows
+            .into_iter()
+            .map(|r| Wallpaper {
+                id: r.id,
+                title: r.title,
+                author_id: r.author_id,
+                author_name: r.author_name,
+                image_url: r.image_url,
+                thumbnail_url: r.thumbnail_url,
+                tags: r.tags.0,
+                primary_colors: r.primary_colors.0,
+                dimensions: (r.width as u32, r.height as u32),
+                size_bytes: r.size_bytes as u64,
+                likes: r.likes.unwrap_or(0) as u32,
+                downloads: r.downloads.unwrap_or(0) as u32,
+                created_at: r.created_at,
+                is_private: r.is_private,
+                is_live: r.is_live,
+                embedding: None,
+                phash: None,
+            })
+            .collect();
+        Ok(results)
+    })
+    .await
 }
 
 pub async fn get_public_uploads(
@@ -92,53 +89,51 @@ pub async fn get_public_uploads(
     page: u32,
     limit: u32,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
-    let cache = get_wallpaper_list_cache();
     let cache_key = format!("public_uploads:{}:{}:{}", author_name, page, limit);
-    if let Some(cached) = cache.get(&cache_key).await {
-        return Ok(cached);
-    }
+    let author_name_cloned = author_name.to_string();
 
-    let pool = get_pool()?;
-    let offset = page * limit;
-    let rows = sqlx::query!(
-        r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
-        WHERE u.name = $1 AND is_private = false
-        ORDER BY w.created_at DESC
-        LIMIT $2 OFFSET $3
-        "#,
-        author_name,
-        limit as i64,
-        offset as i64
-    )
-    .fetch_all(pool)
-    .await?;
+    crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
+        let pool = get_pool()?;
+        let offset = page * limit;
+        let rows = sqlx::query!(
+            r#"
+            SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id
+            WHERE u.name = $1 AND is_private = false
+            ORDER BY w.created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+            author_name_cloned,
+            limit as i64,
+            offset as i64
+        )
+        .fetch_all(pool)
+        .await?;
 
-    let results: Vec<Wallpaper> = rows
-        .into_iter()
-        .map(|r| Wallpaper {
-            id: r.id,
-            title: r.title,
-            author_id: r.author_id,
-            author_name: r.author_name,
-            image_url: r.image_url,
-            thumbnail_url: r.thumbnail_url,
-            tags: r.tags.0,
-            primary_colors: r.primary_colors.0,
-            dimensions: (r.width as u32, r.height as u32),
-            size_bytes: r.size_bytes as u64,
-            likes: r.likes.unwrap_or(0) as u32,
-            downloads: r.downloads.unwrap_or(0) as u32,
-            created_at: r.created_at,
-            is_private: r.is_private,
-            is_live: r.is_live,
-            embedding: None,
-            phash: None,
-        })
-        .collect();
-    let arc_results = std::sync::Arc::new(results);
-    cache.insert(cache_key, arc_results.clone()).await;
-    Ok(arc_results)
+        let results: Vec<Wallpaper> = rows
+            .into_iter()
+            .map(|r| Wallpaper {
+                id: r.id,
+                title: r.title,
+                author_id: r.author_id,
+                author_name: r.author_name,
+                image_url: r.image_url,
+                thumbnail_url: r.thumbnail_url,
+                tags: r.tags.0,
+                primary_colors: r.primary_colors.0,
+                dimensions: (r.width as u32, r.height as u32),
+                size_bytes: r.size_bytes as u64,
+                likes: r.likes.unwrap_or(0) as u32,
+                downloads: r.downloads.unwrap_or(0) as u32,
+                created_at: r.created_at,
+                is_private: r.is_private,
+                is_live: r.is_live,
+                embedding: None,
+                phash: None,
+            })
+            .collect();
+        Ok(results)
+    })
+    .await
 }
 
 pub async fn get_creator_analytics_db(

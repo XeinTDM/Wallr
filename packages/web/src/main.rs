@@ -39,25 +39,23 @@ fn main() {
             axum::extract::Path(id): axum::extract::Path<String>,
             axum::extract::Query(query): axum::extract::Query<DownloadQuery>,
         ) -> impl axum::response::IntoResponse {
-            use axum::body::Body;
+            use axum::response::Redirect;
             use axum::http::StatusCode;
 
             if id.contains('.') || id.contains('/') || id.contains('\\') {
                 return (StatusCode::BAD_REQUEST, "Invalid ID".to_string()).into_response();
             }
 
-            let format = query
+            let mut format = query
                 .format
                 .unwrap_or_else(|| "avif".to_string())
                 .to_lowercase();
+            if format == "jpeg" {
+                format = "jpg".to_string();
+            }
             let width = query.width;
             let height = query.height;
-
-            let source_path = if format == "avif" && width.is_none() {
-                format!("packages/ui/assets/uploads/{}_master.avif", id)
-            } else {
-                format!("packages/ui/assets/uploads/{}_master.jpg", id)
-            };
+            let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
 
             let mut ip = "unknown".to_string();
             if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
@@ -92,52 +90,32 @@ fn main() {
                 }
             });
 
-            let is_native_format = format == "avif" || format == "jpg" || format == "jpeg";
+            let public_url = std::env::var("R2_PUBLIC_URL").unwrap_or_else(|_| "https://cdn.example.com".to_string());
+            let is_native_format = format == "avif" || format == "jpg" || format == "png";
+
             if width.is_none() && height.is_none() && is_native_format {
-                let file = match tokio::fs::File::open(&source_path).await {
-                    Ok(f) => f,
-                    Err(_) => {
-                        let fallback_path = format!("packages/ui/assets/uploads/{}_master.jpg", id);
-                        match tokio::fs::File::open(&fallback_path).await {
-                            Ok(f) => f,
-                            Err(_) => {
-                                return (StatusCode::NOT_FOUND, "Not found".to_string())
-                                    .into_response();
-                            }
-                        }
-                    }
-                };
-
-                let stream = tokio_util::io::ReaderStream::new(file);
-                let body = Body::from_stream(stream);
-
-                let mut res_headers = axum::http::HeaderMap::new();
-                let content_type = match format.as_str() {
-                    "avif" => "image/avif",
-                    "jpeg" | "jpg" => "image/jpeg",
-                    "png" => "image/png",
-                    _ => "application/octet-stream",
-                };
-                res_headers.insert("Content-Type", content_type.parse().unwrap());
-                res_headers.insert(
-                    "Content-Disposition",
-                    format!("attachment; filename=\"{}.{}\"", id, format)
-                        .parse()
-                        .unwrap(),
-                );
-                return (res_headers, body).into_response();
+                let target_url = format!("{}/{}_master.{}", public_url, id, format);
+                return Redirect::found(&target_url).into_response();
             }
 
-            let data = match tokio::fs::read(&source_path).await {
-                Ok(d) => d,
-                Err(_) => {
-                    let fallback_path = format!("packages/ui/assets/uploads/{}_master.jpg", id);
-                    match tokio::fs::read(&fallback_path).await {
-                        Ok(d) => d,
-                        Err(_) => {
-                            return (StatusCode::NOT_FOUND, "Not found".to_string())
-                                .into_response();
-                        }
+            let variant_suffix = format!("{}x{}_{}", width.unwrap_or(0), height.unwrap_or(0), crop_val);
+            let variant_url = format!("{}/{}_{}.{}", public_url, id, variant_suffix, format);
+
+            if let Ok(resp) = reqwest::get(&variant_url).await {
+                if resp.status().is_success() {
+                    return Redirect::found(&variant_url).into_response();
+                }
+            }
+
+            let master_url_avif = format!("{}/{}_master.avif", public_url, id);
+            let master_url_jpg = format!("{}/{}_master.jpg", public_url, id);
+
+            let data = match reqwest::get(&master_url_avif).await {
+                Ok(resp) if resp.status().is_success() => resp.bytes().await.unwrap_or_default().to_vec(),
+                _ => {
+                    match reqwest::get(&master_url_jpg).await {
+                        Ok(resp) if resp.status().is_success() => resp.bytes().await.unwrap_or_default().to_vec(),
+                        _ => return (StatusCode::NOT_FOUND, "Source image not found on CDN".to_string()).into_response(),
                     }
                 }
             };
@@ -178,7 +156,6 @@ fn main() {
                             if src_ratio > dst_ratio {
                                 crop_height = img.height() as f64;
                                 crop_width = crop_height * dst_ratio;
-                                let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
                                 if crop_val == "left" {
                                     crop_left = 0.0;
                                 } else if crop_val == "right" {
@@ -189,7 +166,6 @@ fn main() {
                             } else {
                                 crop_width = img.width() as f64;
                                 crop_height = crop_width / dst_ratio;
-                                let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
                                 if crop_val == "top" {
                                     crop_top = 0.0;
                                 } else if crop_val == "bottom" {
@@ -258,21 +234,10 @@ fn main() {
                 }
             };
 
-            let mut headers = axum::http::HeaderMap::new();
-            let content_type = match format.as_str() {
-                "jpeg" | "jpg" => "image/jpeg",
-                "png" => "image/png",
-                _ => "application/octet-stream",
-            };
-            headers.insert("Content-Type", content_type.parse().unwrap());
-            headers.insert(
-                "Content-Disposition",
-                format!("attachment; filename=\"{}.{}\"", id, format)
-                    .parse()
-                    .unwrap(),
-            );
-
-            (headers, out_bytes).into_response()
+            match api::storage::save_image_file(&id, &variant_suffix, &format, &out_bytes).await {
+                Ok(new_url) => Redirect::found(&new_url).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to upload variant: {}", e)).into_response(),
+            }
         }
 
         async fn upload_raw_handler(
@@ -458,6 +423,16 @@ fn main() {
                     }
                 });
             }
+
+            let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
+            if let Err(e) = api::storage::init_redis(&redis_url) {
+                eprintln!("⚠️ Redis initialization failed: {}. Caching will fail.", e);
+            } else {
+                tokio::spawn(async move {
+                    api::storage::queue::start_worker_loop().await;
+                });
+            }
+
             api::ai::init_tagger();
             let router = dioxus::server::router(App);
             let app = router
@@ -482,7 +457,6 @@ fn main() {
 fn App() -> Element {
     use_context_provider(|| Signal::new(false));
     use_context_provider(|| Signal::new(Vec::<Toast>::new()));
-    use_context_provider(|| Signal::new(AuthState::Loading));
     ui::init_i18n();
 
     rsx! {
@@ -494,6 +468,9 @@ fn App() -> Element {
         ToastContainer {}
         document::Stylesheet { href: MAIN_CSS }
 
-        Router::<Route> {}
+        SuspenseBoundary {
+            fallback: |_| rsx! {},
+            Router::<Route> {}
+        }
     }
 }

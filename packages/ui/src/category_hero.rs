@@ -178,10 +178,10 @@ pub fn CategoryHero<R: Routable + Clone + PartialEq + 'static>(
                                 onchange: move |e| timeframe.set(e.value()),
                                 value: "{timeframe}",
                                 option { value: "", "{i18n.t(\"ch_all_time\")}" }
-                                option { value: "today", "{i18n.t(\"ch_past_24_hours\")}" }
-                                option { value: "week", "{i18n.t(\"ch_past_week\")}" }
-                                option { value: "month", "{i18n.t(\"ch_past_month\")}" }
-                                option { value: "year", "{i18n.t(\"ch_past_year\")}" }
+                                option { value: "daily", "{i18n.t(\"ch_past_24_hours\")}" }
+                                option { value: "weekly", "{i18n.t(\"ch_past_week\")}" }
+                                option { value: "monthly", "{i18n.t(\"ch_past_month\")}" }
+                                option { value: "yearly", "{i18n.t(\"ch_past_year\")}" }
                             }
                         }
                     }

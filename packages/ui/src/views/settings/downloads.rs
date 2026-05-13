@@ -11,7 +11,7 @@ pub fn DownloadsSettings() -> Element {
 
     rsx! {
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { CloudDownload { size: 20 } "{i18n.t(\"dl_preferences\")}" }
 
             div { class: "setting-group",
@@ -50,7 +50,7 @@ pub fn DownloadsSettings() -> Element {
         }
 
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { Eye { size: 20 } "{i18n.t(\"dl_content_filters\")}" }
 
             div { class: "setting-group",

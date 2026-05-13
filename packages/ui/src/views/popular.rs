@@ -79,7 +79,7 @@ fn PopularSection(
                 style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;",
                 h2 { style: "font-size: 24px; font-weight: 800;", "{title}" }
                 Link {
-                    to: crate::app::Route::PopularGrid { period },
+                    to: crate::app::Route::PopularGrid { period: period.clone() },
                     style: "color: var(--accent-primary); font-weight: 600; text-decoration: none;",
                     "{i18n.t(\"popular_view_all\")}"
                 }
@@ -107,7 +107,7 @@ fn PopularSection(
                     },
                     _ => rsx! {
                         for i in 0..4 {
-                            div { key: "skeleton-{i}", class: "skeleton glass", style: "aspect-ratio: 16/9; border-radius: 12px;" }
+                            div { key: "popular-skeleton-{period}-{i}", class: "skeleton glass", style: "aspect-ratio: 16/9; border-radius: 12px;" }
                         }
                     }
                 }
@@ -149,26 +149,60 @@ pub fn PopularGrid(period: String) -> Element {
             ai_filter: ai_filter(),
             timeframe: timeframe(),
         };
+
+        let period_val = _period_clone.clone();
         async move {
-            if !has_more() {
-                return;
-            }
             let c = cursor();
+            let mut default_filters = api::FilterOptions::default();
+            default_filters.sort = "downloads".to_string();
+            default_filters.timeframe = period_val;
 
             let res = if current_cat == "all" || current_cat.is_empty() {
+                if c.is_none() && filters == default_filters {
+                    return;
+                }
                 get_wallpapers(c.clone(), 20, filters).await
             } else {
-                api::get_wallpapers_by_tag(current_cat, c, 20, filters).await
+                api::get_wallpapers_by_tag(current_cat, c.clone(), 20, filters).await
             };
 
             if let Ok(new_wps) = res {
                 if new_wps.is_empty() {
                     has_more.set(false);
                 } else {
-                    all_wallpapers.with_mut(|w| w.extend_from_slice(new_wps.as_ref()));
+                    all_wallpapers.with_mut(|w| {
+                        if c.is_none() {
+                            w.clear();
+                        }
+                        for new_wp in new_wps.iter() {
+                            if !w.iter().any(|existing: &api::Wallpaper| existing.id == new_wp.id) {
+                                w.push(new_wp.clone());
+                            }
+                        }
+                    });
                 }
             }
         }
+    });
+
+    let mut is_first_mount = use_signal(|| true);
+    use_effect(move || {
+        let _ = category();
+        let _ = resolution();
+        let _ = sort();
+        let _ = aspect_ratio();
+        let _ = color();
+        let _ = ai_filter();
+        let _ = timeframe();
+        
+        if is_first_mount() {
+            is_first_mount.set(false);
+            return;
+        }
+
+        all_wallpapers.write().clear();
+        cursor.set(None);
+        has_more.set(true);
     });
 
     rsx! {
@@ -185,7 +219,7 @@ pub fn PopularGrid(period: String) -> Element {
             timeframe,
             WallpaperGrid {
                 wallpapers: all_wallpapers,
-                is_loading: _fetch().is_none(),
+                is_loading: _fetch().is_none() && (!cursor().is_none() || all_wallpapers().is_empty()),
                 on_end_reached: move |_| {
                     if has_more() {
                         if let Some(last) = all_wallpapers().last() {

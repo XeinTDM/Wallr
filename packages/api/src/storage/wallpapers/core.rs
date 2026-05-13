@@ -244,3 +244,34 @@ pub async fn get_upload_status(id: &str) -> anyhow::Result<Option<crate::models:
         created_at: r.created_at,
     }))
 }
+
+pub async fn fetch_and_cache_wallpaper_list<F, Fut>(
+    cache_key: String,
+    fetch_db: F,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<Vec<Wallpaper>>>,
+{
+    let list_cache = crate::storage::cache::get_wallpaper_list_cache();
+    if let Some(cached_ids) = list_cache.get(&cache_key).await {
+        let mut results = Vec::with_capacity(cached_ids.len());
+        for id in cached_ids {
+            if let Ok(Some(wp)) = get_wallpaper_by_id(&id).await {
+                results.push(wp);
+            }
+        }
+        return Ok(std::sync::Arc::new(results));
+    }
+
+    let results = fetch_db().await?;
+    let ids: Vec<String> = results.iter().map(|w| w.id.clone()).collect();
+    list_cache.insert(cache_key, ids).await;
+
+    let wp_cache = crate::storage::cache::get_wallpaper_cache();
+    for wp in &results {
+        wp_cache.insert(wp.id.clone(), Some(wp.clone())).await;
+    }
+
+    Ok(std::sync::Arc::new(results))
+}

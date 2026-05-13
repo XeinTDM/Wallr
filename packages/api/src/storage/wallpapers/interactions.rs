@@ -11,7 +11,7 @@ pub async fn get_user_favorites(
     
     let mut q = sqlx::QueryBuilder::new(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
+        SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
         INNER JOIN user_favorites f ON w.id = f.wallpaper_id
         JOIN users u ON w.author_id = u.id
         WHERE f.user_id = 
@@ -47,7 +47,7 @@ pub async fn get_user_favorites(
             id: r.get("id"),
             title: r.get("title"),
             author_id: r.get("author_id"),
-            author_name: r.get("author_name!"),
+            author_name: r.get("author_name"),
             image_url: r.get("image_url"),
             thumbnail_url: r.get("thumbnail_url"),
             tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,
@@ -73,7 +73,6 @@ pub async fn check_favorites_db(user_id: &str, wallpaper_ids: &[String]) -> anyh
     }
     let pool = get_pool()?;
     
-    // Convert Vec<String> to a postgres array
     let rows = sqlx::query!(
         r#"
         SELECT wallpaper_id FROM user_favorites
@@ -221,7 +220,7 @@ pub async fn get_user_feed_db(
     
     let mut q = sqlx::QueryBuilder::new(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
+        SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live 
         FROM wallpapers w
         INNER JOIN user_follows f ON w.author_id = f.following_id
         JOIN users u ON w.author_id = u.id
@@ -259,7 +258,7 @@ pub async fn get_user_feed_db(
             id: r.get("id"),
             title: r.get("title"),
             author_id: r.get("author_id"),
-            author_name: r.get("author_name!"),
+            author_name: r.get("author_name"),
             image_url: r.get("image_url"),
             thumbnail_url: r.get("thumbnail_url"),
             tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,
@@ -288,7 +287,7 @@ pub async fn get_user_download_history_db(
     
     let mut q = sqlx::QueryBuilder::new(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, d.downloaded_at 
+        SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, d.downloaded_at 
         FROM wallpapers w
         INNER JOIN user_downloads d ON w.id = d.wallpaper_id
         JOIN users u ON w.author_id = u.id
@@ -325,7 +324,7 @@ pub async fn get_user_download_history_db(
             id: r.get("id"),
             title: r.get("title"),
             author_id: r.get("author_id"),
-            author_name: r.get("author_name!"),
+            author_name: r.get("author_name"),
             image_url: r.get("image_url"),
             thumbnail_url: r.get("thumbnail_url"),
             tags: r.get::<'_, sqlx::types::Json<Vec<String>>, _>("tags").0,

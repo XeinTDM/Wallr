@@ -1,7 +1,6 @@
-use crate::storage::get_pool;
-use crate::Wallpaper;
 use super::core::map_wallpaper_row;
-use crate::storage::cache::get_wallpaper_list_cache;
+use crate::Wallpaper;
+use crate::storage::get_pool;
 
 fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate::FilterOptions) {
     q.push(" AND w.is_private = false");
@@ -73,247 +72,23 @@ pub async fn load_all_wallpapers(
     limit: u32,
     filters: crate::FilterOptions,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
-    let cache = get_wallpaper_list_cache();
     let cache_key = format!("all:{:?}:{}:{:?}", cursor, limit, filters);
-    if let Some(cached) = cache.get(&cache_key).await {
-        return Ok(cached);
-    }
-
-    let pool = get_pool()?;
-    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1");
-    apply_filters(&mut q, &filters);
-
-    if let Some(c) = &cursor {
-        let parts: Vec<&str> = c.split(',').collect();
-        if parts.len() == 2 {
-            let val = parts[0];
-            let id = parts[1];
-            match filters.sort.as_str() {
-                "downloads" => {
-                    let downloads: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (w.downloads, w.id) < (");
-                    q.push_bind(downloads);
-                    q.push(", ");
-                    q.push_bind(id.to_string());
-                    q.push(")");
-                }
-                "rating" => {
-                    let likes: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (w.likes, w.id) < (");
-                    q.push_bind(likes);
-                    q.push(", ");
-                    q.push_bind(id.to_string());
-                    q.push(")");
-                }
-                _ => {
-                    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
-                        q.push(" AND (w.created_at, w.id) < (");
-                        q.push_bind(date.with_timezone(&chrono::Utc));
-                        q.push(", ");
-                        q.push_bind(id.to_string());
-                        q.push(")");
-                    }
-                }
-            }
-        }
-    }
-
-    match filters.sort.as_str() {
-        "downloads" => {
-            q.push(" ORDER BY w.downloads DESC, w.id DESC");
-        }
-        "rating" => {
-            q.push(" ORDER BY w.likes DESC, w.id DESC");
-        }
-        _ => {
-            q.push(" ORDER BY w.created_at DESC, w.id DESC");
-        }
-    }
-
-    q.push(" LIMIT ");
-    q.push_bind(limit as i64);
-
-    let rows = q.build().fetch_all(pool).await?;
-    let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
-
-    let arc_results = std::sync::Arc::new(results);
-    cache.insert(cache_key, arc_results.clone()).await;
-
-    Ok(arc_results)
-}
-
-pub async fn get_wallpapers_by_tag(
-    tag: &str,
-    page: u32,
-    limit: u32,
-    filters: crate::FilterOptions,
-) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
-    let cache = get_wallpaper_list_cache();
-    let cache_key = format!("tag:{}:{}:{}:{:?}", tag, page, limit, filters);
-    if let Some(cached) = cache.get(&cache_key).await {
-        return Ok(cached);
-    }
-
-    let cursor_cache = crate::storage::cache::get_cursor_cache();
-    let prev_cursor_key = if page > 0 {
-        Some(format!("cursor:tag:{}:{}:{}:{:?}", tag, page - 1, limit, filters))
-    } else {
-        None
-    };
-
-    let mut cursor = None;
-    if let Some(key) = &prev_cursor_key {
-        cursor = cursor_cache.get(key).await;
-    }
-
-    let pool = get_pool()?;
-    let tag_json = serde_json::json!(tag);
-
-    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.tags @> ");
-    q.push_bind(tag_json);
-    apply_filters(&mut q, &filters);
-
-    let mut use_offset = false;
-
-    if let Some(c) = cursor {
-        let parts: Vec<&str> = c.split(',').collect();
-        if parts.len() == 2 {
-            let val = parts[0];
-            let id = parts[1];
-            match filters.sort.as_str() {
-                "downloads" => {
-                    let downloads: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (w.downloads, w.id) < (");
-                    q.push_bind(downloads);
-                    q.push(", ");
-                    q.push_bind(id.to_string());
-                    q.push(")");
-                }
-                "rating" => {
-                    let likes: i64 = val.parse().unwrap_or(0);
-                    q.push(" AND (w.likes, w.id) < (");
-                    q.push_bind(likes);
-                    q.push(", ");
-                    q.push_bind(id.to_string());
-                    q.push(")");
-                }
-                _ => {
-                    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
-                        q.push(" AND (w.created_at, w.id) < (");
-                        q.push_bind(date.with_timezone(&chrono::Utc));
-                        q.push(", ");
-                        q.push_bind(id.to_string());
-                        q.push(")");
-                    }
-                }
-            }
-        }
-    } else if page > 0 {
-        use_offset = true;
-    }
-
-    match filters.sort.as_str() {
-        "downloads" => {
-            q.push(" ORDER BY w.downloads DESC, w.id DESC");
-        }
-        "rating" => {
-            q.push(" ORDER BY w.likes DESC, w.id DESC");
-        }
-        _ => {
-            q.push(" ORDER BY w.created_at DESC, w.id DESC");
-        }
-    }
-
-    q.push(" LIMIT ");
-    q.push_bind((limit + 1) as i64);
-
-    if use_offset {
-        q.push(" OFFSET ");
-        q.push_bind((page * limit) as i64);
-    }
-
-    let rows = q.build().fetch_all(pool).await?;
-
-    let mut results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
     
-    let mut next_cursor = None;
-    if results.len() > limit as usize {
-        results.pop(); // Remove the extra item
-        if let Some(last) = results.last() {
-            match filters.sort.as_str() {
-                "downloads" => {
-                    next_cursor = Some(format!("{},{}", last.downloads, last.id));
-                }
-                "rating" => {
-                    next_cursor = Some(format!("{},{}", last.likes, last.id));
-                }
-                _ => {
-                    next_cursor = Some(format!("{},{}", last.created_at.to_rfc3339(), last.id));
-                }
-            }
-        }
-    }
+    let cursor_cloned = cursor.clone();
+    let filters_cloned = filters.clone();
+    crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
+        let pool = get_pool()?;
+        let mut q = sqlx::QueryBuilder::new(
+            "SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1",
+        );
+        apply_filters(&mut q, &filters_cloned);
 
-    let arc_results = std::sync::Arc::new(results);
-    cache.insert(cache_key, arc_results.clone()).await;
-
-    if let Some(nc) = next_cursor {
-        let current_cursor_key = format!("cursor:tag:{}:{}:{}:{:?}", tag, page, limit, filters);
-        cursor_cache.insert(current_cursor_key, nc).await;
-    }
-
-    Ok(arc_results)
-}
-
-pub async fn search_wallpapers_db(
-    query: &str,
-    cursor: Option<String>,
-    limit: u32,
-    filters: crate::FilterOptions,
-) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
-    let cache = get_wallpaper_list_cache();
-    let cache_key = format!("search:{}:{:?}:{}:{:?}", query, cursor, limit, filters);
-    if let Some(cached) = cache.get(&cache_key).await {
-        return Ok(cached);
-    }
-
-    let pool = get_pool()?;
-
-    let mut embed_opt = None;
-    if !query.is_empty()
-        && let Some(tagger) = crate::ai::TAGGER.get()
-            && let Ok(embed) = tagger.get_text_embedding(query) {
-                embed_opt = Some(pgvector::Vector::from(embed));
-            }
-
-    let mut q = sqlx::QueryBuilder::new("SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1");
-
-    if embed_opt.is_none() && !query.is_empty() {
-        q.push(" AND w.search_vector @@ websearch_to_tsquery('english', ");
-        q.push_bind(query);
-        q.push(")");
-    }
-
-    apply_filters(&mut q, &filters);
-
-    if let Some(c) = &cursor {
-        let parts: Vec<&str> = c.split(',').collect();
-        if parts.len() == 2 {
-            let val = parts[0];
-            let id = parts[1];
-            if embed_opt.is_none() && !query.is_empty() {
-                // When doing text search, the primary sort is ts_rank. We'll simplify and use created_at as secondary or fallback.
-                // Doing proper keyset on ts_rank is complex. If it's search, we might just fall back to simple keyset on id/created_at
-                // Actually, let's just use created_at for all cursors in search for simplicity, as rank can be identical.
-                if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
-                    q.push(" AND (w.created_at, w.id) < (");
-                    q.push_bind(date.with_timezone(&chrono::Utc));
-                    q.push(", ");
-                    q.push_bind(id.to_string());
-                    q.push(")");
-                }
-            } else {
-                 match filters.sort.as_str() {
+        if let Some(c) = &cursor_cloned {
+            let parts: Vec<&str> = c.split(',').collect();
+            if parts.len() == 2 {
+                let val = parts[0];
+                let id = parts[1];
+                match filters_cloned.sort.as_str() {
                     "downloads" => {
                         let downloads: i64 = val.parse().unwrap_or(0);
                         q.push(" AND (w.downloads, w.id) < (");
@@ -342,36 +117,8 @@ pub async fn search_wallpapers_db(
                 }
             }
         }
-    }
 
-    if let Some(embed) = embed_opt {
-        q.push(" ORDER BY w.embedding <=> ");
-        q.push_bind(embed);
-    } else if !query.is_empty() {
-        match filters.sort.as_str() {
-            "downloads" => {
-                q.push(" ORDER BY w.downloads DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ");
-                q.push_bind(query);
-                q.push(")) DESC, w.id DESC");
-            }
-            "rating" => {
-                q.push(
-                    " ORDER BY w.likes DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ",
-                );
-                q.push_bind(query);
-                q.push(")) DESC, w.id DESC");
-            }
-            "date" => {
-                q.push(" ORDER BY w.created_at DESC, w.id DESC");
-            }
-            _ => {
-                q.push(" ORDER BY ts_rank(w.search_vector, websearch_to_tsquery('english', ");
-                q.push_bind(query);
-                q.push(")) DESC, w.created_at DESC, w.id DESC");
-            }
-        }
-    } else {
-        match filters.sort.as_str() {
+        match filters_cloned.sort.as_str() {
             "downloads" => {
                 q.push(" ORDER BY w.downloads DESC, w.id DESC");
             }
@@ -382,17 +129,223 @@ pub async fn search_wallpapers_db(
                 q.push(" ORDER BY w.created_at DESC, w.id DESC");
             }
         }
-    }
 
-    q.push(" LIMIT ");
-    q.push_bind(limit as i64);
+        q.push(" LIMIT ");
+        q.push_bind(limit as i64);
 
-    let rows = q.build().fetch_all(pool).await?;
+        let rows = q.build().fetch_all(pool).await?;
+        let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
 
-    let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
-    let arc_results = std::sync::Arc::new(results);
-    cache.insert(cache_key, arc_results.clone()).await;
-    Ok(arc_results)
+        Ok(results)
+    }).await
+}
+
+pub async fn get_wallpapers_by_tag(
+    tag: &str,
+    cursor: Option<String>,
+    limit: u32,
+    filters: crate::FilterOptions,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
+    let cache_key = format!("tag:{}:{:?}:{}:{:?}", tag, cursor, limit, filters);
+    
+    let tag_cloned = tag.to_string();
+    let cursor_cloned = cursor.clone();
+    let filters_cloned = filters.clone();
+
+    crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
+        let pool = get_pool()?;
+        let tag_json = serde_json::json!(tag_cloned);
+
+        let mut q = sqlx::QueryBuilder::new(
+            "SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.tags @> ",
+        );
+        q.push_bind(tag_json);
+        apply_filters(&mut q, &filters_cloned);
+
+        if let Some(c) = &cursor_cloned {
+            let parts: Vec<&str> = c.split(',').collect();
+            if parts.len() == 2 {
+                let val = parts[0];
+                let id = parts[1];
+                match filters_cloned.sort.as_str() {
+                    "downloads" => {
+                        let downloads: i64 = val.parse().unwrap_or(0);
+                        q.push(" AND (w.downloads, w.id) < (");
+                        q.push_bind(downloads);
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
+                    "rating" => {
+                        let likes: i64 = val.parse().unwrap_or(0);
+                        q.push(" AND (w.likes, w.id) < (");
+                        q.push_bind(likes);
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
+                    _ => {
+                        if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                            q.push(" AND (w.created_at, w.id) < (");
+                            q.push_bind(date.with_timezone(&chrono::Utc));
+                            q.push(", ");
+                            q.push_bind(id.to_string());
+                            q.push(")");
+                        }
+                    }
+                }
+            }
+        }
+
+        match filters_cloned.sort.as_str() {
+            "downloads" => {
+                q.push(" ORDER BY w.downloads DESC, w.id DESC");
+            }
+            "rating" => {
+                q.push(" ORDER BY w.likes DESC, w.id DESC");
+            }
+            _ => {
+                q.push(" ORDER BY w.created_at DESC, w.id DESC");
+            }
+        }
+
+        q.push(" LIMIT ");
+        q.push_bind(limit as i64);
+
+        let rows = q.build().fetch_all(pool).await?;
+
+        let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
+        Ok(results)
+    }).await
+}
+
+pub async fn search_wallpapers_db(
+    query: &str,
+    cursor: Option<String>,
+    limit: u32,
+    filters: crate::FilterOptions,
+) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
+    let cache_key = format!("search:{}:{:?}:{}:{:?}", query, cursor, limit, filters);
+    let query_cloned = query.to_string();
+    let cursor_cloned = cursor.clone();
+    let filters_cloned = filters.clone();
+
+    crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
+        let pool = get_pool()?;
+
+        let mut embed_opt = None;
+        if !query_cloned.is_empty()
+            && let Some(tagger) = crate::ai::TAGGER.get()
+            && let Ok(embed) = tagger.get_text_embedding(&query_cloned)
+        {
+            embed_opt = Some(pgvector::Vector::from(embed));
+        }
+
+        let mut q = sqlx::QueryBuilder::new(
+            "SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE 1=1",
+        );
+
+        if embed_opt.is_none() && !query_cloned.is_empty() {
+            q.push(" AND w.search_vector @@ websearch_to_tsquery('english', ");
+            q.push_bind(&query_cloned);
+            q.push(")");
+        }
+
+        apply_filters(&mut q, &filters_cloned);
+
+        if let Some(c) = &cursor_cloned {
+            let parts: Vec<&str> = c.split(',').collect();
+            if parts.len() == 2 {
+                let val = parts[0];
+                let id = parts[1];
+                if embed_opt.is_none() && !query_cloned.is_empty() {
+                    if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                        q.push(" AND (w.created_at, w.id) < (");
+                        q.push_bind(date.with_timezone(&chrono::Utc));
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
+                } else {
+                    match filters_cloned.sort.as_str() {
+                        "downloads" => {
+                            let downloads: i64 = val.parse().unwrap_or(0);
+                            q.push(" AND (w.downloads, w.id) < (");
+                            q.push_bind(downloads);
+                            q.push(", ");
+                            q.push_bind(id.to_string());
+                            q.push(")");
+                        }
+                        "rating" => {
+                            let likes: i64 = val.parse().unwrap_or(0);
+                            q.push(" AND (w.likes, w.id) < (");
+                            q.push_bind(likes);
+                            q.push(", ");
+                            q.push_bind(id.to_string());
+                            q.push(")");
+                        }
+                        _ => {
+                            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
+                                q.push(" AND (w.created_at, w.id) < (");
+                                q.push_bind(date.with_timezone(&chrono::Utc));
+                                q.push(", ");
+                                q.push_bind(id.to_string());
+                                q.push(")");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(embed) = embed_opt {
+            q.push(" ORDER BY w.embedding <=> ");
+            q.push_bind(embed);
+        } else if !query_cloned.is_empty() {
+            match filters_cloned.sort.as_str() {
+                "downloads" => {
+                    q.push(" ORDER BY w.downloads DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ");
+                    q.push_bind(&query_cloned);
+                    q.push(")) DESC, w.id DESC");
+                }
+                "rating" => {
+                    q.push(
+                        " ORDER BY w.likes DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ",
+                    );
+                    q.push_bind(&query_cloned);
+                    q.push(")) DESC, w.id DESC");
+                }
+                "date" => {
+                    q.push(" ORDER BY w.created_at DESC, w.id DESC");
+                }
+                _ => {
+                    q.push(" ORDER BY ts_rank(w.search_vector, websearch_to_tsquery('english', ");
+                    q.push_bind(&query_cloned);
+                    q.push(")) DESC, w.created_at DESC, w.id DESC");
+                }
+            }
+        } else {
+            match filters_cloned.sort.as_str() {
+                "downloads" => {
+                    q.push(" ORDER BY w.downloads DESC, w.id DESC");
+                }
+                "rating" => {
+                    q.push(" ORDER BY w.likes DESC, w.id DESC");
+                }
+                _ => {
+                    q.push(" ORDER BY w.created_at DESC, w.id DESC");
+                }
+            }
+        }
+
+        q.push(" LIMIT ");
+        q.push_bind(limit as i64);
+
+        let rows = q.build().fetch_all(pool).await?;
+
+        let results: Vec<Wallpaper> = rows.into_iter().map(map_wallpaper_row).collect();
+        Ok(results)
+    }).await
 }
 
 pub async fn get_similar_wallpapers_db(

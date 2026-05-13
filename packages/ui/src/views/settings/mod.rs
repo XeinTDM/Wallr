@@ -108,7 +108,7 @@ pub fn Settings() -> Element {
     rsx! {
         document::Stylesheet { href: SETTINGS_CSS }
         div {
-            class: "settings-page fade-in",
+            class: "settings-page",
             style: "padding: 100px 32px 80px; max-width: 1200px; margin: 0 auto; display: flex; gap: 40px; min-height: calc(100vh - 80px);",
 
             // Sidebar

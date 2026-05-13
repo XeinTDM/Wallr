@@ -10,7 +10,7 @@ pub fn AppearanceSettings() -> Element {
 
     rsx! {
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { Palette { size: 20 } "{i18n.t(\"appr_theme_display\")}" }
 
             div { class: "setting-group",

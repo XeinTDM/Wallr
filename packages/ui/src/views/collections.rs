@@ -9,7 +9,7 @@ pub fn Collections() -> Element {
 
     rsx! {
         div {
-            class: "container fade-in",
+            class: "container",
             style: "padding: 120px 0 80px;",
 
             div {

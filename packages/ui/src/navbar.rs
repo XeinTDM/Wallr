@@ -153,7 +153,7 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
                     style: "flex: 0; display: flex; justify-content: center; min-width: 400px; margin: 0 40px; position: relative;",
                     if props.show_search {
                         div {
-                            class: "nav-search-container fade-in",
+                            class: "nav-search-container",
                             style: "display: flex; align-items: center; width: 100%; position: relative; transition: all var(--transition-smooth);",
                             input {
                                 id: "nav-search-input",

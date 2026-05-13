@@ -12,13 +12,14 @@ fn main() {
 fn App() -> Element {
     use_context_provider(|| Signal::new(false)); // show_search
     use_context_provider(|| Signal::new(Vec::<Toast>::new())); // toasts
-    use_context_provider(|| Signal::new(AuthState::Loading)); // auth state
 
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         Theme {}
         ToastContainer {}
 
-        Router::<Route> {}
-    }
-}
+        SuspenseBoundary {
+            fallback: |_| rsx! {},
+            Router::<Route> {}
+        }
+        }}

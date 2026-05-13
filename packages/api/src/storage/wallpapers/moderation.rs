@@ -1,22 +1,26 @@
-use crate::storage::get_pool;
 use super::core::delete_wallpaper;
-use std::sync::RwLock;
+use crate::storage::get_pool;
 use bk_tree::BKTree;
+use std::sync::RwLock;
 
 pub struct Hamming;
 impl bk_tree::Metric<Vec<u8>> for Hamming {
     fn distance(&self, a: &Vec<u8>, b: &Vec<u8>) -> u32 {
-        a.iter().zip(b.iter()).map(|(x, y)| (x ^ y).count_ones()).sum()
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x ^ y).count_ones())
+            .sum()
     }
-    
+
     fn threshold_distance(&self, a: &Vec<u8>, b: &Vec<u8>, threshold: u32) -> Option<u32> {
         let dist = self.distance(a, b);
         if dist <= threshold { Some(dist) } else { None }
     }
 }
 
-pub static BANNED_HASH_TREE: std::sync::OnceLock<std::sync::RwLock<bk_tree::BKTree<Vec<u8>, Hamming>>> = std::sync::OnceLock::new();
-
+pub static BANNED_HASH_TREE: std::sync::OnceLock<
+    std::sync::RwLock<bk_tree::BKTree<Vec<u8>, Hamming>>,
+> = std::sync::OnceLock::new();
 
 pub async fn report_wallpaper_db(
     wallpaper_id: &str,
@@ -162,31 +166,32 @@ pub async fn resolve_report_db(
     Ok(())
 }
 
-pub static HASH_TREE_LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static HASH_TREE_LOADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 pub async fn check_banned_phash(phash: &[u8]) -> anyhow::Result<bool> {
     let tree_lock = BANNED_HASH_TREE.get_or_init(|| RwLock::new(BKTree::new(Hamming)));
-    
+
     if !HASH_TREE_LOADED.load(std::sync::atomic::Ordering::SeqCst) {
         let pool = get_pool()?;
         let rows = sqlx::query!("SELECT phash FROM banned_hashes")
             .fetch_all(pool)
             .await?;
-            
+
         let mut tree = tree_lock.write().unwrap();
         if !HASH_TREE_LOADED.load(std::sync::atomic::Ordering::SeqCst) {
-             for row in rows {
+            for row in rows {
                 let banned: Vec<u8> = row.phash;
                 tree.add(banned);
-             }
-             HASH_TREE_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            HASH_TREE_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
-    
+
     let tree = tree_lock.read().unwrap();
     let phash_vec = phash.to_vec();
     let mut matches = tree.find(&phash_vec, 5);
-    
+
     Ok(matches.next().is_some())
 }
 
@@ -202,12 +207,13 @@ pub async fn add_banned_hash(phash: &[u8], admin_id: &str, reason: &str) -> anyh
     )
     .execute(pool)
     .await?;
-    
+
     if let Some(tree_lock) = BANNED_HASH_TREE.get()
-        && let Ok(mut tree) = tree_lock.write() {
-            tree.add(phash.to_vec());
-        }
-    
+        && let Ok(mut tree) = tree_lock.write()
+    {
+        tree.add(phash.to_vec());
+    }
+
     Ok(())
 }
 
@@ -221,12 +227,11 @@ pub async fn submit_dmca_claim_db(
 ) -> anyhow::Result<()> {
     let pool = get_pool()?;
     let id = uuid::Uuid::new_v4().to_string();
-    
-    // Ensure wallpaper exists
+
     let wp = sqlx::query!("SELECT id FROM wallpapers WHERE id = $1", wallpaper_id)
         .fetch_optional(pool)
         .await?;
-        
+
     if wp.is_none() {
         return Err(anyhow::anyhow!("Wallpaper not found"));
     }
@@ -241,7 +246,9 @@ pub async fn submit_dmca_claim_db(
     Ok(())
 }
 
-pub async fn get_dmca_claims_db(status: Option<&str>) -> anyhow::Result<Vec<crate::models::DmcaClaim>> {
+pub async fn get_dmca_claims_db(
+    status: Option<&str>,
+) -> anyhow::Result<Vec<crate::models::DmcaClaim>> {
     let pool = get_pool()?;
     let mut results = Vec::new();
 
@@ -299,9 +306,12 @@ pub async fn resolve_dmca_claim_db(
 ) -> anyhow::Result<()> {
     let pool = get_pool()?;
 
-    let claim = sqlx::query!("SELECT wallpaper_id FROM dmca_claims WHERE id = $1", claim_id)
-        .fetch_optional(pool)
-        .await?;
+    let claim = sqlx::query!(
+        "SELECT wallpaper_id FROM dmca_claims WHERE id = $1",
+        claim_id
+    )
+    .fetch_optional(pool)
+    .await?;
 
     let wallpaper_id = match claim {
         Some(c) => c.wallpaper_id,
@@ -349,4 +359,3 @@ pub async fn resolve_dmca_claim_db(
 
     Ok(())
 }
-

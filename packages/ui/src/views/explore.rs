@@ -12,10 +12,20 @@ pub fn Explore(tag: String) -> Element {
     let ai_filter = use_signal(String::new);
     let timeframe = use_signal(String::new);
 
-    let mut cursor = use_signal(|| None::<String>);
-    let mut all_wallpapers = use_signal(Vec::new);
-    let mut has_more = use_signal(|| true);
+    let tag_for_initial = tag.clone();
+    let initial_res = use_server_future(move || {
+        let t = tag_for_initial.clone();
+        async move {
+            let filters = api::FilterOptions::default();
+            api::get_wallpapers_by_tag(t, None, 20, filters).await.unwrap_or_default()
+        }
+    })?;
 
+    let mut cursor = use_signal(|| None::<String>);
+    let mut all_wallpapers = use_signal(|| initial_res().map(|arc| arc.as_ref().clone()).unwrap_or_default());
+    let mut has_more = use_signal(|| !initial_res().map(|arc| arc.as_ref().clone()).unwrap_or_default().is_empty());
+
+    let tag_for_fetch = tag.clone();
     let _fetch = use_resource(move || {
         let current_cat = category();
         let filters = api::FilterOptions {
@@ -26,19 +36,53 @@ pub fn Explore(tag: String) -> Element {
             ai_filter: ai_filter(),
             timeframe: timeframe(),
         };
+        let tag_clone = tag_for_fetch.clone();
         async move {
-            if !has_more() {
+            let c = cursor();
+            let mut default_filters = api::FilterOptions::default();
+            default_filters.sort = "rating".to_string();
+            
+            if c.is_none() && current_cat == tag_clone && filters == default_filters {
                 return;
             }
-            let c = cursor();
-            if let Ok(new_wps) = get_wallpapers_by_tag(current_cat, c, 20, filters).await {
+
+            if let Ok(new_wps) = get_wallpapers_by_tag(current_cat, c.clone(), 20, filters).await {
                 if new_wps.is_empty() {
                     has_more.set(false);
                 } else {
-                    all_wallpapers.with_mut(|w| w.extend_from_slice(new_wps.as_ref()));
+                    all_wallpapers.with_mut(|w| {
+                        if c.is_none() {
+                            w.clear();
+                        }
+                        for new_wp in new_wps.iter() {
+                            if !w.iter().any(|existing: &api::Wallpaper| existing.id == new_wp.id) {
+                                w.push(new_wp.clone());
+                            }
+                        }
+                    });
                 }
             }
         }
+    });
+
+    let mut is_first_mount = use_signal(|| true);
+    use_effect(move || {
+        let _ = category();
+        let _ = resolution();
+        let _ = sort();
+        let _ = aspect_ratio();
+        let _ = color();
+        let _ = ai_filter();
+        let _ = timeframe();
+        
+        if is_first_mount() {
+            is_first_mount.set(false);
+            return;
+        }
+
+        all_wallpapers.write().clear();
+        cursor.set(None);
+        has_more.set(true);
     });
 
     rsx! {
@@ -55,7 +99,7 @@ pub fn Explore(tag: String) -> Element {
             timeframe,
             WallpaperGrid {
                 wallpapers: all_wallpapers,
-                is_loading: _fetch().is_none(),
+                is_loading: _fetch().is_none() && (!cursor().is_none() || all_wallpapers().is_empty()),
                 on_end_reached: move |_| {
                     if has_more() {
                         if let Some(last) = all_wallpapers().last() {

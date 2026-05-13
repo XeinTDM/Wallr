@@ -10,7 +10,7 @@ pub fn NotificationsSettings() -> Element {
 
     rsx! {
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { Bell { size: 20 } "{i18n.t(\"notif_communication\")}" }
 
             div { class: "setting-group",

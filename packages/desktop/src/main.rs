@@ -97,7 +97,6 @@ fn App() -> Element {
 
     use_context_provider(|| Signal::new(false)); // show_search
     use_context_provider(|| Signal::new(Vec::<Toast>::new())); // toasts
-    use_context_provider(|| Signal::new(AuthState::Loading)); // auth state
     ui::init_i18n();
     let i18n = ui::use_i18n();
 
@@ -226,7 +225,6 @@ fn App() -> Element {
 
                     if let Ok(event) = hotkey_channel.try_recv() {
                         if event.id == id_w || event.id == id_right || event.id == id_left {
-                            // Try active playlist first, fallback to favorites
                             let mut candidates = vec![];
                             if let Ok((playlist, _)) = api::get_active_playlist_items().await {
                                 candidates = playlist;
@@ -301,7 +299,10 @@ fn App() -> Element {
         Theme {}
         ToastContainer {}
 
-        Router::<Route> {}
+        SuspenseBoundary {
+            fallback: |_| rsx! {},
+            Router::<Route> {}
+        }
     }
 }
 

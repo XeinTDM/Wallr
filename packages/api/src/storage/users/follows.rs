@@ -153,3 +153,47 @@ pub async fn get_follow_counts(user_id: &str) -> anyhow::Result<(u32, u32)> {
         following_row.count.unwrap_or(0) as u32,
     ))
 }
+
+pub async fn get_suggested_users_db(user_id: &str, limit: i64) -> anyhow::Result<Vec<UserRecord>> {
+    let pool = get_pool()?;
+    
+    let rows = sqlx::query!(
+        "SELECT u.*, 
+            (SELECT COUNT(*) FROM user_follows f WHERE f.following_id = u.id) as follower_count
+         FROM users u
+         WHERE u.id != $1 
+         AND u.is_banned = false
+         AND NOT EXISTS (
+             SELECT 1 FROM user_follows uf WHERE uf.follower_id = $1 AND uf.following_id = u.id
+         )
+         ORDER BY follower_count DESC, u.created_at DESC
+         LIMIT $2",
+        user_id,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let users = rows
+        .into_iter()
+        .map(|r| UserRecord {
+            user: crate::User {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                pfp_url: r.pfp_url,
+                banner_url: r.banner_url,
+                bio: r.bio,
+                social_links: r.social_links.and_then(|v| serde_json::from_value(v).ok()),
+                role: r.role,
+                is_banned: r.is_banned,
+                active_playlist_id: r.active_playlist_id,
+                playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            },
+            password_hash: r.password_hash,
+            token_version: r.token_version,
+        })
+        .collect();
+
+    Ok(users)
+}

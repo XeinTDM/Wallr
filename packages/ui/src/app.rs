@@ -76,19 +76,33 @@ pub enum Route {
 pub fn AppNavbar() -> Element {
     #[allow(unused_mut)]
     let mut show_search = use_context::<Signal<bool>>();
-    let mut user = use_context::<Signal<AuthState>>();
     let i18n = crate::i18n::use_i18n();
 
     let route = use_route::<Route>();
     let is_home = matches!(route, Route::Home {});
 
-    let _auth_resource = use_resource(move || async move {
+    let auth_res = use_server_future(move || async move {
         if let Ok(Some(u)) = api::get_current_user().await {
-            user.set(AuthState::Authenticated(u));
+            Some(u)
         } else {
-            user.set(AuthState::Unauthenticated);
-            crate::FAVORITED_IDS.write().clear();
-            crate::CHECKED_FAVORITES_IDS.write().clear();
+            None
+        }
+    })?;
+
+    let initial_auth_state = match auth_res.read().as_ref() {
+        Some(Some(u)) => AuthState::Authenticated(u.clone()),
+        _ => AuthState::Unauthenticated,
+    };
+
+    let mut user = use_context_provider(|| Signal::new(initial_auth_state.clone()));
+
+    use_effect(move || {
+        let new_state = match auth_res.read().as_ref() {
+            Some(Some(u)) => AuthState::Authenticated(u.clone()),
+            _ => AuthState::Unauthenticated,
+        };
+        if *user.peek() != new_state {
+            user.set(new_state);
         }
     });
 
@@ -120,8 +134,7 @@ pub fn AppNavbar() -> Element {
     let display_search = if is_home { show_search() } else { true };
 
     rsx! {
-        div {
-            style: "display: flex; flex-direction: column; min-height: 100vh;",
+        div { style: "display: flex; flex-direction: column; min-height: 100vh;",
             Navbar {
                 home_route: Route::Home {},
                 upload_route: Route::Upload {},
@@ -151,15 +164,16 @@ pub fn AppNavbar() -> Element {
 
                 ExploreDropdown {
                     sections: rsx! {
-                        DropdownSection {
-                            title: i18n.t("categories").to_string(),
+                        DropdownSection { title: i18n.t("categories").to_string(),
                             div {
                                 class: "explore-categories-list",
                                 style: "display: grid; grid-template-columns: 1fr 1fr; gap: 8px;",
-                                for (val, label) in api::tags::CATEGORIES.iter().take(6) {
+                                for (val , label) in api::tags::CATEGORIES.iter().take(6) {
                                     Link {
                                         key: "{val}",
-                                        to: Route::Explore { tag: val.to_string() },
+                                        to: Route::Explore {
+                                            tag: val.to_string(),
+                                        },
                                         class: "menu-item-hover",
                                         style: "padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); text-decoration: none; color: white; font-size: 14px; font-weight: 600; transition: all 0.2s;",
                                         "{label}"
@@ -167,25 +181,23 @@ pub fn AppNavbar() -> Element {
                                 }
                             }
                             Link {
-                                to: Route::Explore { tag: "all".into() },
+                                to: Route::Explore {
+                                    tag: "all".into(),
+                                },
                                 class: "glow-hover",
                                 style: "margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; color: var(--accent-primary); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none; padding: 4px 0; transition: opacity 0.2s;",
                                 "Browse All Categories"
                                 span { style: "font-size: 16px;", "→" }
                             }
                         }
-                        DropdownSection {
-                            title: i18n.t("discover").to_string(),
-                            separator: true,
+                        DropdownSection { title: i18n.t("discover").to_string(), separator: true,
                             Link { to: Route::Latest {}, "{i18n.t(\"latest\")}" }
                             Link { to: Route::PopularSelection {}, "{i18n.t(\"popular\")}" }
                             Link { to: Route::Editorial {}, "Editorial" }
                             Link { to: Route::AiGenerated {}, "AI Generated" }
                             Link { to: Route::LiveWallpapers {}, "Live Wallpapers" }
                         }
-                        DropdownSection {
-                            title: "Info".to_string(),
-                            separator: true,
+                        DropdownSection { title: "Info".to_string(), separator: true,
                             Link { to: Route::About {}, "{i18n.t(\"about\")}" }
                             Link { to: Route::FAQ {}, "FAQ" }
                             Link { to: Route::ContactUs {}, "Contact us" }
@@ -197,7 +209,7 @@ pub fn AppNavbar() -> Element {
                                 }
                             }
                         }
-                    }
+                    },
                 }
             }
             main { style: "flex: 1;", Outlet::<Route> {} }

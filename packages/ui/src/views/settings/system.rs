@@ -22,7 +22,7 @@ pub fn SystemSettings() -> Element {
 
     rsx! {
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { Monitor { size: 20 } "{i18n.t(\"sys_integration\")}" }
 
             div { class: "setting-group",
@@ -60,7 +60,7 @@ pub fn KeybindsSettings() -> Element {
     let i18n = crate::i18n::use_i18n();
     rsx! {
         div {
-            class: "settings-card fade-in",
+            class: "settings-card",
             h2 { Keyboard { size: 20 } "{i18n.t(\"sys_global_keybinds\")}" }
 
             div { class: "setting-group",

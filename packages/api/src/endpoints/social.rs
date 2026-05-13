@@ -1,6 +1,5 @@
 use crate::models::*;
 use dioxus::prelude::*;
-use crate::auth::*;
 
 #[server]
 pub async fn get_user_favorites(
@@ -139,6 +138,18 @@ pub async fn get_following(
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
     Ok(following.into_iter().map(|u| u.user).collect())
+}
+
+#[server]
+pub async fn get_suggested_users(limit: u32) -> Result<Vec<User>, ServerFnError> {
+    let user = require_auth().await?;
+    let limit_i64 = limit as i64;
+    
+    let suggested = crate::storage::users::follows::get_suggested_users_db(&user.id, limit_i64)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(suggested.into_iter().map(|u| u.user).collect())
 }
 
 

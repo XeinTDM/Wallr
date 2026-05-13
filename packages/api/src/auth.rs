@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use crate::models::{User, UserRecord};
 
 #[cfg(feature = "server")]
 fn extract_client_ip(
@@ -124,7 +123,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
     let is_valid = if let Some(user_record) = &user_record_opt {
         let hash_clone = user_record.password_hash.clone();
         let pass_clone = password.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::get_heavy_runtime().spawn_blocking(move || {
             let parsed_hash =
                 PasswordHash::new(&hash_clone).map_err(|e| format!("Hash error: {}", e))?;
             Ok::<bool, String>(
@@ -138,7 +137,7 @@ pub async fn login(email: String, password: String) -> Result<(), ServerFnError>
         .map_err(ServerFnError::new)?
     } else {
         let pass_clone = password.clone();
-        let _ = tokio::task::spawn_blocking(move || {
+        let _ = crate::get_heavy_runtime().spawn_blocking(move || {
             use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
             let salt = SaltString::generate(&mut OsRng);
             let _ = Argon2::default().hash_password(pass_clone.as_bytes(), &salt);
@@ -221,7 +220,7 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
         return Err(ServerFnError::new("api_err_username_exists"));
     }
 
-    let password_hash = tokio::task::spawn_blocking(move || {
+    let password_hash = crate::get_heavy_runtime().spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
             .hash_password(password.as_bytes(), &salt)
@@ -319,7 +318,7 @@ pub async fn change_password(
         .ok_or_else(|| ServerFnError::new("api_err_user_not_found"))?;
 
     let hash_clone = user_record.password_hash.clone();
-    let is_valid = tokio::task::spawn_blocking(move || {
+    let is_valid = crate::get_heavy_runtime().spawn_blocking(move || {
         let parsed_hash =
             PasswordHash::new(&hash_clone).map_err(|e| format!("Hash error: {}", e))?;
         Ok::<bool, String>(
@@ -336,7 +335,7 @@ pub async fn change_password(
         return Err(ServerFnError::new("api_err_wrong_pwd"));
     }
 
-    let new_password_hash = tokio::task::spawn_blocking(move || {
+    let new_password_hash = crate::get_heavy_runtime().spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
             .hash_password(new_password.as_bytes(), &salt)
@@ -427,7 +426,7 @@ pub async fn reset_password_with_token(
     token: String,
     new_password: String,
 ) -> Result<(), ServerFnError> {
-    let new_password_hash = tokio::task::spawn_blocking(move || {
+    let new_password_hash = crate::get_heavy_runtime().spawn_blocking(move || {
         use argon2::PasswordHasher;
         let salt = argon2::password_hash::SaltString::generate(
             &mut argon2::password_hash::rand_core::OsRng,

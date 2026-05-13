@@ -27,7 +27,7 @@ pub fn PublicProfile(username: String) -> Element {
     rsx! {
         div {
             div {
-                class: "fade-in",
+                class: "",
             style: "padding-top: var(--nav-height, 68px);",
 
             match profile() {

@@ -3,7 +3,7 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
         .await?
         .ok_or_else(|| anyhow::anyhow!("api_err_user_not_found"))?;
 
-    let favorites = crate::storage::wallpapers::get_user_favorites(user_id, 0, 1000).await?;
+    let favorites = crate::storage::wallpapers::get_user_favorites(user_id, None, 1000).await?;
     let uploads = crate::storage::wallpapers::get_user_uploads(&user_record.user.name, 0, 1000).await?;
 
     let profile_json = serde_json::to_string_pretty(&user_record.user)?;
@@ -30,7 +30,7 @@ pub async fn export_user_data(user_id: &str) -> anyhow::Result<String> {
     let pfp_url = user_record.user.pfp_url.clone();
     let banner_url = user_record.user.banner_url.clone();
 
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    crate::get_heavy_runtime().spawn_blocking(move || -> anyhow::Result<()> {
         let file = std::fs::File::create(&output_path)?;
         let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
         {

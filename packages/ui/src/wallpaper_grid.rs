@@ -94,7 +94,7 @@ pub fn WallpaperGrid(
 
                 if is_loading {
                     for i in 0..4 {
-                        div { key: "skeleton-{i}", class: "skeleton glass", style: "height: 240px; border-radius: 20px;" }
+                        div { key: "grid-skeleton-{i}", class: "skeleton glass", style: "height: 240px; border-radius: 20px;" }
                     }
                 }
 

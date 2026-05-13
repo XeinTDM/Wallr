@@ -26,13 +26,13 @@ pub fn AdminReports() -> Element {
     let mut status_filter = use_signal(|| "pending".to_string());
 
     #[allow(unused_mut)]
-    let mut reports_res = use_resource(move || {
+    let mut reports_res = use_server_future(move || {
         let f = status_filter();
         async move {
             let status = if f == "all" { None } else { Some(f) };
             get_reported_wallpapers(status).await
         }
-    });
+    })?;
 
     let resolve_action = move |report_id: String, action: String| {
         spawn(async move {
@@ -47,7 +47,7 @@ pub fn AdminReports() -> Element {
 
     rsx! {
         div {
-            class: "container fade-in",
+            class: "container",
             style: "padding: 120px 0 80px;",
 
             div {

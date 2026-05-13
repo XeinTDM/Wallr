@@ -30,7 +30,7 @@ pub fn CollectionDetail(id: String) -> Element {
     rsx! {
         div {
             div {
-                class: "container fade-in",
+                class: "container",
                 style: "padding-top: var(--nav-height, 68px); padding-bottom: 80px;",
 
                 div {
