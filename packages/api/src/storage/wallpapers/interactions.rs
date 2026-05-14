@@ -11,7 +11,7 @@ pub async fn get_user_favorites(
     
     let mut q = sqlx::QueryBuilder::new(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
+        SELECT w.id, w.title, w.description, w.source_url, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live FROM wallpapers w
         INNER JOIN user_favorites f ON w.id = f.wallpaper_id
         JOIN users u ON w.author_id = u.id
         WHERE f.user_id = 
@@ -291,7 +291,7 @@ pub async fn get_user_download_history_db(
     
     let mut q = sqlx::QueryBuilder::new(
         r#"
-        SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, d.downloaded_at 
+        SELECT w.id, w.title, w.description, w.source_url, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, d.downloaded_at 
         FROM wallpapers w
         INNER JOIN user_downloads d ON w.id = d.wallpaper_id
         JOIN users u ON w.author_id = u.id

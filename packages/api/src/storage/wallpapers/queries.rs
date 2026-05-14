@@ -33,6 +33,20 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
             _ => {}
         }
     }
+    if !filters.orientation.is_empty() {
+        match filters.orientation.as_str() {
+            "landscape" => {
+                q.push(" AND w.width > w.height");
+            }
+            "portrait" => {
+                q.push(" AND w.height > w.width");
+            }
+            "square" => {
+                q.push(" AND w.width = w.height");
+            }
+            _ => {}
+        }
+    }
     if !filters.color.is_empty() {
         q.push(" AND w.primary_colors ? ");
         q.push_bind(filters.color.clone());
@@ -68,6 +82,21 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
             }
             _ => {}
         }
+    }
+    if !filters.author.is_empty() {
+        q.push(" AND u.name ILIKE ");
+        q.push_bind(format!("%{}%", filters.author));
+    }
+    if !filters.source.is_empty() {
+        q.push(" AND w.source_url ILIKE ");
+        q.push_bind(format!("%{}%", filters.source));
+    }
+    if !filters.license.is_empty() {
+        q.push(" AND w.tags @> ");
+        q.push_bind(serde_json::json!(vec![format!("license:{}", filters.license)]));
+    }
+    if filters.curated {
+        q.push(" AND EXISTS (SELECT 1 FROM editorial_collection_items eci JOIN editorial_collections ec ON eci.collection_id = ec.id WHERE eci.wallpaper_id = w.id AND ec.is_published = true)");
     }
 }
 
@@ -161,7 +190,7 @@ pub async fn get_wallpapers_by_tag(
         let tag_json = serde_json::json!(tag_cloned);
 
         let mut q = sqlx::QueryBuilder::new(
-            "SELECT w.id, w.title, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.tags @> ",
+            "SELECT w.id, w.title, w.description, w.source_url, w.author_id, u.name as author_name, w.image_url, w.thumbnail_url, w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, w.downloads, w.created_at, w.is_private, w.is_live, w.phash FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.tags @> ",
         );
         q.push_bind(tag_json);
         apply_filters(&mut q, &filters_cloned);

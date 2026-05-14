@@ -49,8 +49,8 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
 
     sqlx::query!(
         r#"
-        INSERT INTO wallpapers (id, title, author_id, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding, phash)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        INSERT INTO wallpapers (id, title, author_id, image_url, thumbnail_url, tags, primary_colors, width, height, size_bytes, likes, downloads, created_at, is_private, is_live, embedding, phash, description, source_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         ON CONFLICT (id) DO UPDATE SET
             title = EXCLUDED.title,
             author_id = EXCLUDED.author_id,
@@ -66,7 +66,9 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
             is_private = EXCLUDED.is_private,
             is_live = EXCLUDED.is_live,
             embedding = COALESCE(EXCLUDED.embedding, wallpapers.embedding),
-            phash = EXCLUDED.phash
+            phash = EXCLUDED.phash,
+            description = EXCLUDED.description,
+            source_url = EXCLUDED.source_url
         "#,
         wallpaper.id,
         wallpaper.title,
@@ -84,7 +86,9 @@ pub async fn save_wallpaper_data(wallpaper: &Wallpaper) -> anyhow::Result<()> {
         wallpaper.is_private,
         wallpaper.is_live,
         embed as _,
-        phash_ref
+        phash_ref,
+        wallpaper.description,
+        wallpaper.source_url
     )
     .execute(pool)
     .await?;
@@ -174,10 +178,7 @@ pub async fn delete_wallpaper(id: &str) -> anyhow::Result<()> {
         .await;
     crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 
-    let storage_path = crate::storage::files::get_storage_path();
-    let _ = tokio::fs::remove_file(storage_path.join(format!("{}_master.jpg", id))).await;
-    let _ = tokio::fs::remove_file(storage_path.join(format!("{}_master.avif", id))).await;
-    let _ = tokio::fs::remove_file(storage_path.join(format!("{}_thumb.jpg", id))).await;
+    let _ = crate::storage::files::delete_all_wallpaper_files(id).await;
 
     Ok(())
 }
