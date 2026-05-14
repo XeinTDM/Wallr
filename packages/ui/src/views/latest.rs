@@ -1,5 +1,4 @@
 use crate::{CategoryHero, WallpaperGrid};
-use api::get_wallpapers_by_tag;
 use dioxus::prelude::*;
 
 #[component]
@@ -15,7 +14,7 @@ pub fn Latest() -> Element {
 
     let initial_res = use_server_future(move || async move {
         let filters = api::FilterOptions::default();
-        api::get_wallpapers_by_tag("latest".to_string(), None, 20, filters)
+        api::get_wallpapers(None, 20, filters)
             .await
             .unwrap_or_default()
     })?;
@@ -57,7 +56,7 @@ pub fn Latest() -> Element {
             }
 
             let res = if current_cat.is_empty() {
-                get_wallpapers_by_tag("latest".to_string(), c.clone(), 20, filters).await
+                api::get_wallpapers(c.clone(), 20, filters).await
             } else {
                 api::get_wallpapers_by_tag(current_cat, c.clone(), 20, filters).await
             };
