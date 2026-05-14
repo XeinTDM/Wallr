@@ -15,7 +15,7 @@ pub fn AiGenerated() -> Element {
 
     let initial_res = use_server_future(move || async move {
         let filters = api::FilterOptions { ai_filter: "only".to_string(), ..Default::default() };
-        api::get_wallpapers_by_tag("ai-generated".to_string(), None, 20, filters).await.unwrap_or_default()
+        api::get_wallpapers_by_tag("ai".to_string(), None, 20, filters).await.unwrap_or_default()
     })?;
 
     let mut cursor = use_signal(|| None::<String>);
@@ -31,6 +31,7 @@ pub fn AiGenerated() -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
+            safe_search: true,
         };
         async move {
             let c = cursor();
@@ -40,7 +41,7 @@ pub fn AiGenerated() -> Element {
             }
 
             let res = if current_cat.is_empty() {
-                get_wallpapers_by_tag("ai-generated".to_string(), c.clone(), 20, filters).await
+                get_wallpapers_by_tag("ai".to_string(), c.clone(), 20, filters).await
             } else {
                 api::get_wallpapers_by_tag(current_cat, c.clone(), 20, filters).await
             };

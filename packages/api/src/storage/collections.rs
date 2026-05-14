@@ -223,7 +223,8 @@ pub async fn get_collection_wallpapers_db(
             is_live: false,
             embedding: None,
             phash: None,
-        });
+            description: None,
+            source_url: None,        });
     }
 
     Ok(std::sync::Arc::new(wallpapers))

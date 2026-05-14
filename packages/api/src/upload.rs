@@ -4,6 +4,8 @@ use crate::models::*;
 pub struct UploadJobPayload {
     pub id: String,
     pub title: String,
+    pub description: Option<String>,
+    pub source_url: Option<String>,
     pub author_id: String,
     pub author_name: String,
     pub user_tags: Vec<String>,
@@ -25,6 +27,8 @@ struct AnalysisResult {
 #[cfg(feature = "server")]
 pub async fn upload_raw_impl(
     title: String,
+    description: Option<String>,
+    source_url: Option<String>,
     author_id: String,
     author_name: String,
     user_tags: Vec<String>,
@@ -37,31 +41,83 @@ pub async fn upload_raw_impl(
         ));
     }
 
-    if let Some(reason) = crate::storage::wallpapers::moderation::check_predatory_metadata(&title, &user_tags) {
-        crate::storage::admin_ban_user_db(&author_id, true).await.ok();
-        crate::storage::freeze_user_wallpapers_db(&author_id).await.ok();
-        
+    if let Some(reason) =
+        crate::storage::wallpapers::moderation::check_predatory_metadata(&title, &user_tags)
+    {
+        crate::storage::admin_ban_user_db(&author_id, true)
+            .await
+            .ok();
+        crate::storage::freeze_user_wallpapers_db(&author_id)
+            .await
+            .ok();
+
         let full_reason = format!("Predatory metadata keyword: {}", reason);
-        crate::storage::wallpapers::moderation::quarantine_upload(&author_id, &author_name, &bytes, &full_reason).await.ok();
-        crate::storage::log_audit_action_db("SYSTEM", "SYSTEM", "AUTO_BAN_CSAM", &author_id, "USER", Some(&full_reason)).await.ok();
-        
-        return Err(anyhow::anyhow!("Upload rejected due to illegal content policy."));
+        crate::storage::wallpapers::moderation::quarantine_upload(
+            &author_id,
+            &author_name,
+            &bytes,
+            &full_reason,
+        )
+        .await
+        .ok();
+        crate::storage::log_audit_action_db(
+            "SYSTEM",
+            "SYSTEM",
+            "AUTO_BAN_CSAM",
+            &author_id,
+            "USER",
+            Some(&full_reason),
+        )
+        .await
+        .ok();
+
+        return Err(anyhow::anyhow!(
+            "Upload rejected due to illegal content policy."
+        ));
     }
 
     let sha256_hex = {
         use sha2::Digest;
-        sha2::Sha256::digest(&bytes).iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        sha2::Sha256::digest(&bytes)
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
     };
 
-    if crate::storage::wallpapers::moderation::check_banned_exact_hash(&sha256_hex).await.unwrap_or(false) {
-        crate::storage::admin_ban_user_db(&author_id, true).await.ok();
-        crate::storage::freeze_user_wallpapers_db(&author_id).await.ok();
-        
+    if crate::storage::wallpapers::moderation::check_banned_exact_hash(&sha256_hex)
+        .await
+        .unwrap_or(false)
+    {
+        crate::storage::admin_ban_user_db(&author_id, true)
+            .await
+            .ok();
+        crate::storage::freeze_user_wallpapers_db(&author_id)
+            .await
+            .ok();
+
         let full_reason = "Banned exact file hash (SHA-256)".to_string();
-        crate::storage::wallpapers::moderation::quarantine_upload(&author_id, &author_name, &bytes, &full_reason).await.ok();
-        crate::storage::log_audit_action_db("SYSTEM", "SYSTEM", "AUTO_BAN_CSAM", &author_id, "USER", Some(&full_reason)).await.ok();
-        
-        return Err(anyhow::anyhow!("Upload rejected due to illegal content policy."));
+        crate::storage::wallpapers::moderation::quarantine_upload(
+            &author_id,
+            &author_name,
+            &bytes,
+            &full_reason,
+        )
+        .await
+        .ok();
+        crate::storage::log_audit_action_db(
+            "SYSTEM",
+            "SYSTEM",
+            "AUTO_BAN_CSAM",
+            &author_id,
+            "USER",
+            Some(&full_reason),
+        )
+        .await
+        .ok();
+
+        return Err(anyhow::anyhow!(
+            "Upload rejected due to illegal content policy."
+        ));
     }
 
     let id = blake3::hash(&bytes).to_hex().to_string();
@@ -71,6 +127,8 @@ pub async fn upload_raw_impl(
     let payload = UploadJobPayload {
         id: id.clone(),
         title,
+        description,
+        source_url,
         author_id,
         author_name,
         user_tags,
@@ -91,17 +149,16 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
         let is_webm = bytes.len() > 4 && bytes[0..4] == [0x1A, 0x45, 0xDF, 0xA3];
         let is_live = is_mp4 || is_webm;
 
-        // 1. Extract frames & Save Master Media
-        let (img, extra_frames, image_url) = extract_media(&payload.id, &bytes, is_live, is_mp4).await?;
+        let (img, extra_frames, image_url) =
+            extract_media(&payload.id, &bytes, is_live, is_mp4).await?;
         let (width, height) = (img.width(), img.height());
 
-        // 2. Heavy ML Analysis & Perceptual Hashing
         let analysis = analyze_media(img, extra_frames, is_live).await?;
 
-        // 3. Save Thumbnail
-        let thumbnail_url = crate::storage::save_image_file(&payload.id, "thumb", "jpg", &analysis.thumb_data).await?;
+        let thumbnail_url =
+            crate::storage::save_image_file(&payload.id, "thumb", "jpg", &analysis.thumb_data)
+                .await?;
 
-        // 4. Content Moderation
         enforce_moderation_ban(
             &payload.author_id,
             &payload.author_name,
@@ -109,10 +166,10 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
             &analysis.phash_bytes,
             &analysis.embedding,
             &analysis.extra_checks,
-            ""
-        ).await?;
+            "",
+        )
+        .await?;
 
-        // 5. Build Metadata
         let mut tags = analysis.tags;
         if analysis.is_nsfw && !tags.contains(&"nsfw".to_string()) {
             tags.push("nsfw".to_string());
@@ -138,7 +195,6 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
             tags.push("hd".to_string());
         }
 
-        // 6. Final AVIF processing (if needed)
         let mut final_image_url = image_url;
         let mut final_size_bytes = original_bytes_len;
 
@@ -147,13 +203,14 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
                 let avif_data = crate::get_heavy_runtime()
                     .spawn_blocking(move || crate::processor::convert_to_avif(&img))
                     .await??;
-                let avif_url = crate::storage::save_image_file(&payload.id, "master", "avif", &avif_data).await?;
+                let avif_url =
+                    crate::storage::save_image_file(&payload.id, "master", "avif", &avif_data)
+                        .await?;
                 final_image_url = avif_url;
                 final_size_bytes = avif_data.len() as u64;
             }
         }
 
-        // 7. Save to Database
         let wallpaper = Wallpaper {
             id: payload.id.clone(),
             title: payload.title,
@@ -172,6 +229,8 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
             is_live,
             embedding: Some(analysis.embedding),
             phash: Some(analysis.phash_bytes),
+            description: payload.description,
+            source_url: payload.source_url,
         };
 
         crate::storage::save_wallpaper_data(&wallpaper).await?;
@@ -182,9 +241,19 @@ pub async fn process_upload_job(payload: UploadJobPayload, bytes: Vec<u8>) {
     .await;
 
     if let Err(e) = result {
-        let _ = crate::storage::wallpapers::core::update_upload_job_status(&payload.id, "failed", Some(&e.to_string())).await;
+        let _ = crate::storage::wallpapers::core::update_upload_job_status(
+            &payload.id,
+            "failed",
+            Some(&e.to_string()),
+        )
+        .await;
     } else {
-        let _ = crate::storage::wallpapers::core::update_upload_job_status(&payload.id, "completed", None).await;
+        let _ = crate::storage::wallpapers::core::update_upload_job_status(
+            &payload.id,
+            "completed",
+            None,
+        )
+        .await;
     }
 }
 
@@ -196,18 +265,44 @@ pub async fn upload_media_impl(
 ) -> anyhow::Result<String> {
     let sha256_hex = {
         use sha2::Digest;
-        sha2::Sha256::digest(&bytes).iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        sha2::Sha256::digest(&bytes)
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
     };
 
-    if crate::storage::wallpapers::moderation::check_banned_exact_hash(&sha256_hex).await.unwrap_or(false) {
+    if crate::storage::wallpapers::moderation::check_banned_exact_hash(&sha256_hex)
+        .await
+        .unwrap_or(false)
+    {
         crate::storage::admin_ban_user_db(&user_id, true).await.ok();
-        crate::storage::freeze_user_wallpapers_db(&user_id).await.ok();
-        
+        crate::storage::freeze_user_wallpapers_db(&user_id)
+            .await
+            .ok();
+
         let full_reason = format!("Banned exact file hash (SHA-256) as {}", media_type);
-        crate::storage::wallpapers::moderation::quarantine_upload(&user_id, "Unknown (Media Upload)", &bytes, &full_reason).await.ok();
-        crate::storage::log_audit_action_db("SYSTEM", "SYSTEM", "AUTO_BAN_CSAM", &user_id, "USER", Some(&full_reason)).await.ok();
-        
-        return Err(anyhow::anyhow!("Upload rejected due to illegal content policy."));
+        crate::storage::wallpapers::moderation::quarantine_upload(
+            &user_id,
+            "Unknown (Media Upload)",
+            &bytes,
+            &full_reason,
+        )
+        .await
+        .ok();
+        crate::storage::log_audit_action_db(
+            "SYSTEM",
+            "SYSTEM",
+            "AUTO_BAN_CSAM",
+            &user_id,
+            "USER",
+            Some(&full_reason),
+        )
+        .await
+        .ok();
+
+        return Err(anyhow::anyhow!(
+            "Upload rejected due to illegal content policy."
+        ));
     }
 
     let (avif_data, phash_bytes, embedding) = crate::get_heavy_runtime()
@@ -254,17 +349,15 @@ pub async fn upload_media_impl(
         &phash_bytes,
         &embedding,
         &[],
-        &context
-    ).await?;
+        &context,
+    )
+    .await?;
 
-    let file_url = crate::storage::save_image_file(&user_id, &media_type, "avif", &avif_data).await?;
+    let file_url =
+        crate::storage::save_image_file(&user_id, &media_type, "avif", &avif_data).await?;
     crate::storage::update_user_media(&user_id, &media_type, &file_url).await?;
     Ok(file_url)
 }
-
-// ---------------------------------------------------------
-// Helper Functions Extracted for Readability
-// ---------------------------------------------------------
 
 #[cfg(feature = "server")]
 async fn extract_media(
@@ -322,7 +415,7 @@ async fn extract_media(
                 let _ = tokio::fs::remove_file(&frame_path).await;
             }
         }
-        
+
         let _ = tokio::fs::remove_file(&video_path).await;
 
         if extracted_images.is_empty() {
@@ -357,35 +450,39 @@ async fn analyze_media(
                 .to_hasher();
 
             let rgba = img.to_rgba8();
-            let img_for_hash = img_hash::image::RgbaImage::from_raw(
-                img.width(),
-                img.height(),
-                rgba.into_raw(),
-            )
-            .ok_or_else(|| anyhow::anyhow!("Failed to convert image for hashing"))?;
+            let img_for_hash =
+                img_hash::image::RgbaImage::from_raw(img.width(), img.height(), rgba.into_raw())
+                    .ok_or_else(|| anyhow::anyhow!("Failed to convert image for hashing"))?;
             let phash = hasher.hash_image(&img_for_hash);
             let phash_bytes = phash.as_bytes().to_vec();
 
             let primary_colors = crate::processor::extract_dominant_colors(&img);
 
             let (tags, embedding, is_nsfw) = if let Some(tagger) = crate::ai::TAGGER.get() {
-                tagger.tag_image(&img).unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512], false))
+                tagger
+                    .tag_image(&img)
+                    .unwrap_or_else(|_| (vec!["misc".to_string()], vec![0.0; 512], false))
             } else {
                 (vec!["misc".to_string()], vec![0.0; 512], false)
             };
 
             let thumb_data = crate::processor::generate_thumbnail(&img, 800);
             let final_img_opt = if is_live { None } else { Some(img) };
-            
+
             let mut extra_checks = Vec::new();
             for frame in extra_frames {
                 let frame_rgba = frame.to_rgba8();
                 if let Some(frame_for_hash) = img_hash::image::RgbaImage::from_raw(
-                    frame.width(), frame.height(), frame_rgba.into_raw()
+                    frame.width(),
+                    frame.height(),
+                    frame_rgba.into_raw(),
                 ) {
                     let f_phash = hasher.hash_image(&frame_for_hash).as_bytes().to_vec();
                     let f_emb = if let Some(tagger) = crate::ai::TAGGER.get() {
-                        tagger.tag_image(&frame).map(|(_, e, _)| e).unwrap_or_else(|_| vec![0.0; 512])
+                        tagger
+                            .tag_image(&frame)
+                            .map(|(_, e, _)| e)
+                            .unwrap_or_else(|_| vec![0.0; 512])
                     } else {
                         vec![0.0; 512]
                     };
@@ -418,42 +515,75 @@ async fn enforce_moderation_ban(
     context: &str,
 ) -> anyhow::Result<()> {
     let mut is_banned_hash = crate::storage::check_banned_phash(phash_bytes).await?;
-    let mut is_banned_embedding = crate::storage::wallpapers::moderation::check_banned_embedding(embedding).await.unwrap_or(false);
+    let mut is_banned_embedding =
+        crate::storage::wallpapers::moderation::check_banned_embedding(embedding)
+            .await
+            .unwrap_or(false);
 
     for (f_phash, f_emb) in extra_checks {
-        if is_banned_hash || is_banned_embedding { break; }
-        if crate::storage::check_banned_phash(f_phash).await.unwrap_or(false) {
+        if is_banned_hash || is_banned_embedding {
+            break;
+        }
+        if crate::storage::check_banned_phash(f_phash)
+            .await
+            .unwrap_or(false)
+        {
             is_banned_hash = true;
         }
-        if crate::storage::wallpapers::moderation::check_banned_embedding(f_emb).await.unwrap_or(false) {
+        if crate::storage::wallpapers::moderation::check_banned_embedding(f_emb)
+            .await
+            .unwrap_or(false)
+        {
             is_banned_embedding = true;
         }
     }
 
     if is_banned_hash || is_banned_embedding {
-        crate::storage::admin_ban_user_db(author_id, true).await.ok();
-        crate::storage::freeze_user_wallpapers_db(author_id).await.ok();
+        crate::storage::admin_ban_user_db(author_id, true)
+            .await
+            .ok();
+        crate::storage::freeze_user_wallpapers_db(author_id)
+            .await
+            .ok();
 
         let reason = if is_banned_embedding {
             "Banned CLIP Embedding"
         } else {
             "Banned pHash"
         };
-        
+
         let full_reason = if context.is_empty() {
             format!("Attempted to upload banned content ({})", reason)
         } else {
-            format!("Attempted to upload banned content ({}) {}", reason, context)
+            format!(
+                "Attempted to upload banned content ({}) {}",
+                reason, context
+            )
         };
 
-        crate::storage::wallpapers::moderation::quarantine_upload(author_id, author_name, bytes, &full_reason).await.ok();
+        crate::storage::wallpapers::moderation::quarantine_upload(
+            author_id,
+            author_name,
+            bytes,
+            &full_reason,
+        )
+        .await
+        .ok();
         crate::storage::log_audit_action_db(
-            "SYSTEM", "SYSTEM", "AUTO_BAN_CSAM", author_id, "USER", 
-            Some(&full_reason)
-        ).await.ok();
+            "SYSTEM",
+            "SYSTEM",
+            "AUTO_BAN_CSAM",
+            author_id,
+            "USER",
+            Some(&full_reason),
+        )
+        .await
+        .ok();
 
-        return Err(anyhow::anyhow!("Upload rejected due to illegal content policy."));
+        return Err(anyhow::anyhow!(
+            "Upload rejected due to illegal content policy."
+        ));
     }
-    
+
     Ok(())
 }

@@ -20,7 +20,11 @@ mod register;
 pub use register::Register;
 
 mod settings;
-pub use settings::Settings;
+pub use settings::{
+    SettingsLayout, SettingsAccount, SettingsAppearance, SettingsDownloads, SettingsNotifications,
+};
+#[cfg(feature = "desktop")]
+pub use settings::{SettingsKeybinds, SettingsSystem};
 
 mod collections;
 pub use collections::Collections;
@@ -55,14 +59,14 @@ pub use info::*;
 mod public_profile;
 pub use public_profile::PublicProfile;
 
-mod admin;
-pub use admin::Admin;
-
-mod admin_users;
-pub use admin_users::*;
-
-mod admin_reports;
-pub use admin_reports::*;
+pub mod admin;
+pub use admin::{
+    AdminLayout,
+    dashboard::AdminDashboard,
+    dmca::AdminDmca,
+    reports::AdminReports,
+    users::AdminUsers,
+};
 
 mod forgot_password;
 pub use forgot_password::*;
@@ -71,4 +75,7 @@ mod reset_password;
 pub use reset_password::*;
 
 mod follows;
-pub use follows::*;
+pub use follows::{UserFollowers, UserFollowing};
+
+mod not_found;
+pub use not_found::NotFound;

@@ -77,6 +77,8 @@ pub async fn get_user_uploads(
                 is_live: r.is_live,
                 embedding: None,
                 phash: None,
+                description: None,
+                source_url: None,
             })
             .collect();
         Ok(results)
@@ -129,6 +131,8 @@ pub async fn get_public_uploads(
                 is_live: r.is_live,
                 embedding: None,
                 phash: None,
+                description: None,
+                source_url: None,
             })
             .collect();
         Ok(results)

@@ -390,14 +390,13 @@ pub fn Navbar<R: Routable + Clone + PartialEq + 'static>(props: NavbarProps<R>) 
 pub fn ExploreDropdown(sections: Element) -> Element {
     let mut is_open = use_signal(|| false);
     let i18n = crate::i18n::use_i18n();
-    #[allow(unused_mut)]
-    let mut menu_offset = use_signal(|| "-200px".to_string());
+    let menu_offset = use_signal(|| "-200px".to_string());
 
     use_effect(move || {
         if is_open() {
             spawn(async move {
-                #[allow(unused_mut, unused_variables)]
-                let mut menu_offset = menu_offset;
+                #[allow(unused_variables)]
+                let menu_offset = menu_offset;
                 #[cfg(target_arch = "wasm32")]
                 {
                     gloo_timers::future::TimeoutFuture::new(10).await;

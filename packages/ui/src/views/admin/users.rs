@@ -1,5 +1,5 @@
 use crate::app::{AuthState, Route};
-use api::{admin_ban_user, admin_bulk_delete_users, get_recent_users};
+use api::{admin_ban_user, admin_bulk_delete_users, get_recent_users, update_user_role};
 use dioxus::prelude::*;
 use lucide_dioxus::{ArrowLeft, Gavel, Trash2, Undo2, Users};
 
@@ -50,7 +50,7 @@ pub fn AdminUsers() -> Element {
                 div {
                     style: "display: flex; align-items: center; gap: 16px;",
                     Link {
-                        to: Route::Admin {},
+                        to: Route::AdminDashboard {},
                         class: "glass glow-hover",
                         style: "padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: white; text-decoration: none;",
                         ArrowLeft { size: 24 }
@@ -104,6 +104,7 @@ pub fn AdminUsers() -> Element {
                                             UserRow {
                                                 user: user.clone(),
                                                 current_user_id: current_user_id.clone(),
+                                                current_user_role: user_role.clone(),
                                                 on_action: {
                                                     let uid = user.id.clone();
                                                     let is_banned = user.is_banned;
@@ -111,6 +112,17 @@ pub fn AdminUsers() -> Element {
                                                         let uid2 = uid.clone();
                                                         spawn(async move {
                                                             if admin_ban_user(uid2, !is_banned).await.is_ok() {
+                                                                users_res.restart();
+                                                            }
+                                                        });
+                                                    }
+                                                },
+                                                on_role_change: {
+                                                    let uid = user.id.clone();
+                                                    move |new_role: String| {
+                                                        let uid2 = uid.clone();
+                                                        spawn(async move {
+                                                            if update_user_role(uid2, new_role).await.is_ok() {
                                                                 users_res.restart();
                                                             }
                                                         });
@@ -201,7 +213,13 @@ pub fn AdminUsers() -> Element {
 }
 
 #[component]
-fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<String>) -> Element {
+fn UserRow(
+    user: api::User,
+    current_user_id: String,
+    current_user_role: String,
+    on_action: EventHandler<String>,
+    on_role_change: EventHandler<String>,
+) -> Element {
     let i18n = crate::i18n::use_i18n();
     let is_banned = user.is_banned;
 
@@ -231,14 +249,31 @@ fn UserRow(user: api::User, current_user_id: String, on_action: EventHandler<Str
             }
             td {
                 style: "padding: 12px;",
-                span {
-                    style: format!("font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; {}", match user.role.as_str() {
-                        "super_admin" => "background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3);",
-                        "admin" => "background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3);",
-                        "moderator" => "background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3);",
-                        _ => "background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);",
-                    }),
-                    "{user.role}"
+                if current_user_id != user.id && (current_user_role == "super_admin" || (current_user_role == "admin" && user.role != "super_admin")) {
+                    select {
+                        class: "glass",
+                        style: "padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); font-size: 11px; font-weight: 700; text-transform: uppercase;",
+                        value: "{user.role}",
+                        onchange: move |e| {
+                            on_role_change.call(e.value().clone());
+                        },
+                        option { value: "user", "User" }
+                        option { value: "moderator", "Moderator" }
+                        option { value: "admin", "Admin" }
+                        if current_user_role == "super_admin" {
+                            option { value: "super_admin", "Super Admin" }
+                        }
+                    }
+                } else {
+                    span {
+                        style: format!("font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; {}", match user.role.as_str() {
+                            "super_admin" => "background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3);",
+                            "admin" => "background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3);",
+                            "moderator" => "background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3);",
+                            _ => "background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);",
+                        }),
+                        "{user.role}"
+                    }
                 }
             }
             td {

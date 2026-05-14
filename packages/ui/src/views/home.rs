@@ -12,24 +12,42 @@ enum FeedTab {
 pub fn Home() -> Element {
     let mut tab = use_signal(|| FeedTab::Trending);
 
-    // Fetch initial data using use_server_future so it serializes in SSR
     let initial_trending_res = use_server_future(move || async move {
         get_wallpapers(None, 20, api::FilterOptions::default())
             .await
             .unwrap_or_default()
     })?;
 
-    let initial_following_res = use_server_future(move || async move {
-        get_user_feed(None, 20).await.unwrap_or_default()
-    })?;
+    let initial_following_res =
+        use_server_future(
+            move || async move { get_user_feed(None, 20).await.unwrap_or_default() },
+        )?;
 
     let mut trending_cursor = use_signal(|| None::<String>);
-    let mut trending_wallpapers = use_signal(|| initial_trending_res().map(|arc| arc.as_ref().clone()).unwrap_or_default());
-    let mut trending_has_more = use_signal(|| !initial_trending_res().map(|arc| arc.as_ref().clone()).unwrap_or_default().is_empty());
+    let mut trending_wallpapers = use_signal(|| {
+        initial_trending_res()
+            .map(|arc| arc.as_ref().clone())
+            .unwrap_or_default()
+    });
+    let mut trending_has_more = use_signal(|| {
+        !initial_trending_res()
+            .map(|arc| arc.as_ref().clone())
+            .unwrap_or_default()
+            .is_empty()
+    });
 
     let mut following_cursor = use_signal(|| None::<String>);
-    let mut following_wallpapers = use_signal(|| initial_following_res().map(|arc| arc.as_ref().clone()).unwrap_or_default());
-    let mut following_has_more = use_signal(|| !initial_following_res().map(|arc| arc.as_ref().clone()).unwrap_or_default().is_empty());
+    let mut following_wallpapers = use_signal(|| {
+        initial_following_res()
+            .map(|arc| arc.as_ref().clone())
+            .unwrap_or_default()
+    });
+    let mut following_has_more = use_signal(|| {
+        !initial_following_res()
+            .map(|arc| arc.as_ref().clone())
+            .unwrap_or_default()
+            .is_empty()
+    });
 
     let mut set_tab = move |new_tab| {
         if tab() != new_tab {
@@ -37,14 +55,17 @@ pub fn Home() -> Element {
         }
     };
 
-    let suggested_users = use_resource(move || async move {
-        api::get_suggested_users(5).await.unwrap_or_default()
-    });
+    let suggested_users =
+        use_resource(move || async move { api::get_suggested_users(5).await.unwrap_or_default() });
 
     let _fetch_more_trending = use_resource(move || async move {
         let c = trending_cursor();
-        if c.is_none() { return; } // Initial load handled by SSR
-        if !trending_has_more() { return; }
+        if c.is_none() {
+            return;
+        }
+        if !trending_has_more() {
+            return;
+        }
 
         if let Ok(new_wps) = get_wallpapers(c, 20, api::FilterOptions::default()).await {
             if new_wps.is_empty() {
@@ -52,7 +73,10 @@ pub fn Home() -> Element {
             } else {
                 trending_wallpapers.with_mut(|w| {
                     for new_wp in new_wps.iter() {
-                        if !w.iter().any(|existing: &api::Wallpaper| existing.id == new_wp.id) {
+                        if !w
+                            .iter()
+                            .any(|existing: &api::Wallpaper| existing.id == new_wp.id)
+                        {
                             w.push(new_wp.clone());
                         }
                     }
@@ -63,8 +87,12 @@ pub fn Home() -> Element {
 
     let _fetch_more_following = use_resource(move || async move {
         let c = following_cursor();
-        if c.is_none() { return; } // Initial load handled by SSR
-        if !following_has_more() { return; }
+        if c.is_none() {
+            return;
+        }
+        if !following_has_more() {
+            return;
+        }
 
         match get_user_feed(c, 20).await {
             Ok(new_wps) => {
@@ -73,7 +101,10 @@ pub fn Home() -> Element {
                 } else {
                     following_wallpapers.with_mut(|w| {
                         for new_wp in new_wps.iter() {
-                            if !w.iter().any(|existing: &api::Wallpaper| existing.id == new_wp.id) {
+                            if !w
+                                .iter()
+                                .any(|existing: &api::Wallpaper| existing.id == new_wp.id)
+                            {
                                 w.push(new_wp.clone());
                             }
                         }
@@ -135,27 +166,30 @@ pub fn Home() -> Element {
                     wallpapers: trending_wallpapers,
                     is_loading: _fetch_more_trending().is_none() && trending_cursor().is_some(),
                     on_end_reached: move |_| {
-                        if trending_has_more()
-                            && let Some(last) = trending_wallpapers().last() {
-                                trending_cursor
-                                    .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
-                            }
+                        if trending_has_more() && let Some(last) = trending_wallpapers().last() {
+                            trending_cursor
+                                .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
+                        }
                     },
                 }
             } else {
                 if following_wallpapers().is_empty() && _fetch_more_following().is_some() {
                     div { style: "text-align: center; padding: 4rem 2rem; color: #888;",
                         p { "You aren't following anyone yet, or they haven't posted any wallpapers." }
-                        
+
                         if let Some(users) = suggested_users() {
                             if !users.is_empty() {
                                 div { style: "margin-top: 3rem;",
-                                    h3 { style: "color: white; margin-bottom: 1.5rem; font-weight: 600;", "Suggested Creators to Follow" }
+                                    h3 { style: "color: white; margin-bottom: 1.5rem; font-weight: 600;",
+                                        "Suggested Creators to Follow"
+                                    }
                                     div { style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; max-width: 1000px; margin: 0 auto;",
                                         for user in users {
                                             Link {
                                                 key: "{user.id}",
-                                                to: crate::app::Route::PublicProfile { username: user.name.replace(" ", "-") },
+                                                to: crate::app::Route::PublicProfile {
+                                                    username: user.name.replace(" ", "-"),
+                                                },
                                                 class: "glass glow-hover",
                                                 style: "display: flex; flex-direction: column; align-items: center; padding: 2rem 1.5rem; border-radius: 20px; text-decoration: none; border: 1px solid rgba(255,255,255,0.05); transition: transform 0.2s;",
                                                 img {
@@ -163,9 +197,13 @@ pub fn Home() -> Element {
                                                     style: "width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem; border: 3px solid rgba(255,255,255,0.1);",
                                                     referrerpolicy: "no-referrer",
                                                 }
-                                                span { style: "color: white; font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem;", "{user.name}" }
+                                                span { style: "color: white; font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem;",
+                                                    "{user.name}"
+                                                }
                                                 if let Some(bio) = user.bio {
-                                                    span { style: "color: var(--text-muted); font-size: 0.85rem; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;", "{bio}" }
+                                                    span { style: "color: var(--text-muted); font-size: 0.85rem; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;",
+                                                        "{bio}"
+                                                    }
                                                 }
                                             }
                                         }
@@ -180,11 +218,10 @@ pub fn Home() -> Element {
                         wallpapers: following_wallpapers,
                         is_loading: _fetch_more_following().is_none() && following_cursor().is_some(),
                         on_end_reached: move |_| {
-                            if following_has_more()
-                                && let Some(last) = following_wallpapers().last() {
-                                    following_cursor
-                                        .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
-                                }
+                            if following_has_more() && let Some(last) = following_wallpapers().last() {
+                                following_cursor
+                                    .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
+                            }
                         },
                     }
                 }

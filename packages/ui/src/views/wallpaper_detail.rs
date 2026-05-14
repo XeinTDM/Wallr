@@ -181,15 +181,8 @@ pub fn WallpaperDetail(id: String) -> Element {
                     let delete_id = wp.id.clone();
                     let delete_id_clone = delete_id.clone();
                     let is_author = if let AuthState::Authenticated(u) = auth_state() {
-
-                        // Left: Large Image
-
-                        // Right: Metadata & Actions
-
                         u.id == wp.author_id
                     } else {
-
-                        // Related Wallpapers
                         false
                     };
                     let is_admin = if let AuthState::Authenticated(u) = auth_state() {
@@ -216,8 +209,12 @@ pub fn WallpaperDetail(id: String) -> Element {
                         document::Meta { name: "twitter:title", content: "{title_text}" }
                         document::Meta { name: "twitter:description", content: "{desc_text}" }
                         document::Meta { name: "twitter:image", content: "{absolute_img_url}" }
+
             
+
                         div {
+            
+
                             class: "detail-grid",
                             style: "display: grid; grid-template-columns: 2fr 1fr; gap: 48px;",
             
@@ -259,6 +256,23 @@ pub fn WallpaperDetail(id: String) -> Element {
                                         },
                                         style: "color: var(--accent-primary); text-decoration: none;",
                                         "{wp.author_name}"
+                                    }
+                                }
+            
+                                if let Some(desc) = wp.description.clone() {
+                                    p { style: "color: var(--text-primary); margin-bottom: 24px; line-height: 1.6; white-space: pre-wrap;",
+                                        "{desc}"
+                                    }
+                                }
+            
+                                if let Some(url) = wp.source_url.clone() {
+                                    a {
+                                        href: "{url}",
+                                        target: "_blank",
+                                        rel: "noopener noreferrer",
+                                        style: "color: var(--accent-primary); display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; text-decoration: none; font-weight: 600;",
+                                        lucide_dioxus::ExternalLink { size: 16 }
+                                        "Original Source"
                                     }
                                 }
             
@@ -730,7 +744,7 @@ fn Tag(tag: String) -> Element {
             class: "glass tag glow-hover",
             onclick: move |_| {
                 nav.push(Route::Search {
-                    query: tag.clone(),
+                    query: Some(tag.clone()),
                 });
             },
             style: "cursor: pointer; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); transition: all 0.2s ease; display: inline-block; color: white;",
@@ -904,10 +918,8 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                                                 style: "background: none; border: none; padding: 4px; margin-left: auto; cursor: pointer; display: flex; align-items: center; justify-content: center;",
                                                 onclick: {
                                                     let c_id = comment.id.clone();
-                                                    #[allow(unused_mut)]
-                                                    let mut res = comments_res;
-                                                    #[allow(unused_mut)]
-                                                    let mut p = page;
+                                                    let res = comments_res;
+                                                    let p = page;
                                                     let toaster = toaster;
                                                     move |_| {
                                                         let c_id = c_id.clone();

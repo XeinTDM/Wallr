@@ -1,8 +1,8 @@
 use crate::app::Route;
-use crate::views::FollowsModal;
 use crate::{LoadingScreen, WallpaperCard, use_toaster};
 use api::{UserCollection, create_user_collection, get_my_collections};
 use dioxus::prelude::*;
+use lucide_dioxus::Key;
 
 #[component]
 pub fn Profile() -> Element {
@@ -13,8 +13,6 @@ pub fn Profile() -> Element {
     let i18n = crate::i18n::use_i18n();
 
     let mut is_create_collection_modal_open = use_signal(|| false);
-    let mut is_follows_modal_open = use_signal(|| false);
-    let mut follows_modal_type = use_signal(|| String::from("followers"));
 
     let user_data = match user() {
         crate::app::AuthState::Loading => return rsx! {
@@ -65,14 +63,6 @@ pub fn Profile() -> Element {
                     user: api::PublicUser::from(user_data.clone()),
                     is_owner: true,
                     latest_upload_url,
-                    on_followers_click: move |_| {
-                        follows_modal_type.set(String::from("followers"));
-                        is_follows_modal_open.set(true);
-                    },
-                    on_following_click: move |_| {
-                        follows_modal_type.set(String::from("following"));
-                        is_follows_modal_open.set(true);
-                    },
                 }
 
                 div { class: "container", style: "padding-bottom: 80px;",
@@ -313,12 +303,6 @@ pub fn Profile() -> Element {
                     });
                 },
             }
-
-            FollowsModal {
-                is_open: is_follows_modal_open,
-                modal_type: follows_modal_type(),
-                username: user_data.name.clone(),
-            }
         }
     }
 }
@@ -379,8 +363,6 @@ pub struct ProfileHeaderProps {
     pub user: api::PublicUser,
     pub is_owner: bool,
     pub latest_upload_url: Option<String>,
-    pub on_followers_click: EventHandler<()>,
-    pub on_following_click: EventHandler<()>,
 }
 
 #[component]
@@ -434,7 +416,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
 
             if props.is_owner {
                 Link {
-                    to: Route::Settings {},
+                    to: Route::SettingsAccount {},
                     class: "edit-overlay-container",
                     style: "display: block; width: 100%; height: 320px; border-radius: 24px; overflow: hidden; background: {banner_bg} center/cover no-repeat; position: relative; box-shadow: 0 10px 20px rgba(0,0,0,0.2);",
                     div { style: "position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, var(--bg-primary)); z-index: 1;" }
@@ -455,7 +437,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
 
                         if props.is_owner {
                             Link {
-                                to: Route::Settings {},
+                                to: Route::SettingsAccount {},
                                 class: "glass edit-overlay-container",
                                 style: "display: block; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; border: 4px solid var(--bg-primary); box-shadow: 0 10px 30px rgba(0,0,0,0.5);",
                                 img {
@@ -482,7 +464,7 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                         if props.is_owner {
                             div { style: "display: flex; gap: 12px; margin-bottom: 16px;",
                                 Link {
-                                    to: Route::Settings {},
+                                    to: Route::SettingsAccount {},
                                     class: "glass glow-hover",
                                     style: "padding: 10px 20px; border-radius: 12px; color: white; font-weight: 600; font-size: 14px; border: 1px solid rgba(255,255,255,0.1); text-decoration: none;",
                                     "{i18n.t(\"profile_edit_profile\")}"
@@ -532,18 +514,18 @@ pub fn ProfileHeader(props: ProfileHeaderProps) -> Element {
                             "{props.user.name}"
                         }
                         div { style: "color: var(--text-secondary); font-size: 15px; display: flex; align-items: center; gap: 12px;",
-                            button {
+                            Link {
+                                to: Route::UserFollowers { username: props.user.name.clone() },
                                 class: "glow-hover-text",
-                                style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
-                                onclick: move |_| props.on_followers_click.call(()),
+                                style: "text-decoration: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
                                 span { style: "font-weight: 600; color: white;", "{followers}" }
                                 span { "{i18n.t(\"profile_followers\")}" }
                             }
                             span { style: "opacity: 0.5;", "•" }
-                            button {
+                            Link {
+                                to: Route::UserFollowing { username: props.user.name.clone() },
                                 class: "glow-hover-text",
-                                style: "background: none; border: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
-                                onclick: move |_| props.on_following_click.call(()),
+                                style: "text-decoration: none; padding: 0; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 4px; font-size: 15px;",
                                 span { style: "font-weight: 600; color: white;", "{following}" }
                                 span { "{i18n.t(\"profile_following\")}" }
                             }

@@ -6,24 +6,8 @@ use lucide_dioxus::{
 };
 
 #[component]
-pub fn Admin() -> Element {
+pub fn AdminDashboard() -> Element {
     let i18n = crate::i18n::use_i18n();
-    let auth_state = use_context::<Signal<AuthState>>();
-    let nav = use_navigator();
-
-    let (is_allowed, user_role) = match auth_state() {
-        AuthState::Authenticated(u) => (
-            u.role == "admin" || u.role == "super_admin" || u.role == "moderator",
-            u.role.clone(),
-        ),
-        AuthState::Loading => return rsx! { crate::LoadingScreen {} },
-        AuthState::Unauthenticated => (false, String::new()),
-    };
-
-    if !is_allowed {
-        nav.push(Route::Home {});
-        return rsx! { div {} };
-    }
 
     #[allow(unused_mut)]
     let mut stats_res = use_server_future(move || async move { get_admin_stats().await })?;
@@ -44,9 +28,6 @@ pub fn Admin() -> Element {
 
     rsx! {
         div {
-            class: "container",
-            style: "padding: 120px 0 80px;",
-
             div {
                 style: "display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px;",
                 h1 {
@@ -100,15 +81,14 @@ pub fn Admin() -> Element {
 
             div {
                 style: "display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 48px;",
-                if user_role == "admin" || user_role == "super_admin" {
-                    div {
-                        class: "glass",
-                        style: "padding: 32px; border-radius: 24px;",
-                        h2 {
-                            style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
-                            ClipboardList { size: 24, color: "var(--accent-primary)" }
-                            "{i18n.t(\"admin_recent_audit_logs\")}"
-                        }
+                div {
+                    class: "glass",
+                    style: "padding: 32px; border-radius: 24px;",
+                    h2 {
+                        style: "margin-bottom: 24px; display: flex; align-items: center; gap: 12px; font-size: 20px;",
+                        ClipboardList { size: 24, color: "var(--accent-primary)" }
+                        "{i18n.t(\"admin_recent_audit_logs\")}"
+                    }
                     match audit_res() {
                         Some(Ok(logs)) => {
                             if logs.is_empty() {
@@ -169,7 +149,6 @@ pub fn Admin() -> Element {
                         }
                     }
                 }
-                }
 
                 div {
                     class: "glass",
@@ -194,6 +173,13 @@ pub fn Admin() -> Element {
                             class: "glow-hover",
                             style: "padding: 12px 24px; border-radius: 12px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fcd34d; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
                             "{i18n.t(\"admin_review_reports\")}"
+                            ArrowRight { size: 18 }
+                        }
+                        Link {
+                            to: Route::AdminDmca {},
+                            class: "glow-hover",
+                            style: "padding: 12px 24px; border-radius: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
+                            "DMCA Claims"
                             ArrowRight { size: 18 }
                         }
                     }

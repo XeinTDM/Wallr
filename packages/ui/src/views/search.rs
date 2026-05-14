@@ -3,7 +3,7 @@ use api::search_wallpapers;
 use dioxus::prelude::*;
 
 #[component]
-pub fn Search(query: String) -> Element {
+pub fn Search(query: Option<String>) -> Element {
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "rating".to_string());
@@ -14,7 +14,7 @@ pub fn Search(query: String) -> Element {
 
     let query_for_initial = query.clone();
     let initial_res = use_server_future(move || {
-        let q = query_for_initial.clone();
+        let q = query_for_initial.clone().unwrap_or_default();
         async move {
             let filters = api::FilterOptions::default();
             api::search_wallpapers(q, None, 20, filters).await.unwrap_or_default()
@@ -27,7 +27,7 @@ pub fn Search(query: String) -> Element {
 
     let query_clone = query.clone();
     let _fetch = use_resource(move || {
-        let query = query_clone.clone();
+        let query_str = query_clone.clone().unwrap_or_default();
         let filters = api::FilterOptions {
             resolution: resolution(),
             sort: sort(),
@@ -35,6 +35,7 @@ pub fn Search(query: String) -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
+            safe_search: true,
         };
         async move {
             let c = cursor();
@@ -43,7 +44,7 @@ pub fn Search(query: String) -> Element {
             if c.is_none() && filters == default_filters {
                 return;
             }
-            if let Ok(new_wps) = search_wallpapers(query, c.clone(), 20, filters).await {
+            if let Ok(new_wps) = search_wallpapers(query_str, c.clone(), 20, filters).await {
                 if new_wps.is_empty() {
                     has_more.set(false);
                 } else {
@@ -82,10 +83,15 @@ pub fn Search(query: String) -> Element {
         has_more.set(true);
     });
 
+    let title_text = match &query {
+        Some(q) if !q.is_empty() => format!("{q} wallpapers"),
+        _ => "Search wallpapers".to_string(),
+    };
+
     rsx! {
         CategoryHero {
             home_route: crate::app::Route::Home {},
-            title: "{query} wallpapers",
+            title: "{title_text}",
             breadcrumb: "Search",
             category,
             resolution,

@@ -270,8 +270,13 @@ async fn oauth_callback(
             role: "user".to_string(),
             is_banned: false,
             active_playlist_id: None,
-            playlist_interval_secs: 3600,
-        };
+            playlist_interval_secs: 300,
+            email_notifs: true,
+            push_notifs: false,
+            download_quality: "Original (4K+)".to_string(),
+            auto_download_avif: true,
+            safe_search: true,
+            };
 
         let record = crate::UserRecord {
             user: new_user.clone(),

@@ -30,6 +30,7 @@ pub fn LiveWallpapers() -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
+            safe_search: true,
         };
         async move {
             let c = cursor();

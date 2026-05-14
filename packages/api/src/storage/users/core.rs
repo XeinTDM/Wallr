@@ -21,6 +21,11 @@ pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>
             is_banned: r.is_banned,
             active_playlist_id: r.active_playlist_id,
             playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            email_notifs: r.email_notifs,
+            push_notifs: r.push_notifs,
+            download_quality: r.download_quality,
+            auto_download_avif: r.auto_download_avif,
+            safe_search: r.safe_search,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -46,6 +51,11 @@ pub async fn get_user_by_name(name: &str) -> anyhow::Result<Option<UserRecord>> 
             is_banned: r.is_banned,
             active_playlist_id: r.active_playlist_id,
             playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            email_notifs: r.email_notifs,
+            push_notifs: r.push_notifs,
+            download_quality: r.download_quality,
+            auto_download_avif: r.auto_download_avif,
+            safe_search: r.safe_search,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -76,6 +86,11 @@ pub async fn get_user_by_id(id: &str) -> anyhow::Result<Option<UserRecord>> {
             is_banned: r.is_banned,
             active_playlist_id: r.active_playlist_id,
             playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            email_notifs: r.email_notifs,
+            push_notifs: r.push_notifs,
+            download_quality: r.download_quality,
+            auto_download_avif: r.auto_download_avif,
+            safe_search: r.safe_search,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -88,8 +103,8 @@ pub async fn create_user(record: &UserRecord) -> anyhow::Result<()> {
     let pool = get_pool()?;
     sqlx::query!(
         r#"
-        INSERT INTO users (id, name, email, pfp_url, password_hash, banner_url, token_version, bio, social_links, role, active_playlist_id, playlist_interval_secs)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        INSERT INTO users (id, name, email, pfp_url, password_hash, banner_url, token_version, bio, social_links, role, active_playlist_id, playlist_interval_secs, email_notifs, push_notifs, download_quality, auto_download_avif, safe_search)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         "#,
         record.user.id,
         record.user.name,
@@ -102,7 +117,12 @@ pub async fn create_user(record: &UserRecord) -> anyhow::Result<()> {
         record.user.social_links.as_ref().map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null)),
         record.user.role,
         record.user.active_playlist_id,
-        record.user.playlist_interval_secs
+        record.user.playlist_interval_secs,
+        record.user.email_notifs,
+        record.user.push_notifs,
+        record.user.download_quality,
+        record.user.auto_download_avif,
+        record.user.safe_search
     )
     .execute(pool)
     .await?;
@@ -219,7 +239,7 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
     let search_pattern = format!("%{}%", query.to_lowercase());
 
     let rows = sqlx::query!(
-        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs FROM users WHERE LOWER(name) LIKE $1 LIMIT $2",
+        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs, email_notifs, push_notifs, download_quality, auto_download_avif, safe_search FROM users WHERE LOWER(name) LIKE $1 LIMIT $2",
         search_pattern,
         limit as i64
     )
@@ -240,10 +260,42 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
             is_banned: r.is_banned,
             active_playlist_id: r.active_playlist_id,
             playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            email_notifs: r.email_notifs,
+            push_notifs: r.push_notifs,
+            download_quality: r.download_quality,
+            auto_download_avif: r.auto_download_avif,
+            safe_search: r.safe_search,
         })
         .collect();
 
     Ok(users)
+}
+
+pub async fn update_user_preferences_db(
+    user_id: &str,
+    email_notifs: bool,
+    push_notifs: bool,
+    download_quality: &str,
+    auto_download_avif: bool,
+    safe_search: bool,
+) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE users SET email_notifs = $1, push_notifs = $2, download_quality = $3, auto_download_avif = $4, safe_search = $5 WHERE id = $6",
+        email_notifs,
+        push_notifs,
+        download_quality,
+        auto_download_avif,
+        safe_search,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
+    let mut cache = get_user_cache();
+    cache.remove(&user_id.to_string()).await;
+
+    Ok(())
 }
 
 pub async fn update_user_playlist(

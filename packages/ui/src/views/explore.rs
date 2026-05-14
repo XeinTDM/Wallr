@@ -35,6 +35,7 @@ pub fn Explore(tag: String) -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
+            safe_search: true,
         };
         let tag_clone = tag_for_fetch.clone();
         async move {

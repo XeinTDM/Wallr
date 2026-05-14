@@ -18,8 +18,9 @@ pub enum Route {
         Home {},
         #[route("/wallpaper/:id")]
         WallpaperDetail { id: String },
+        #[route("/search")]
         #[route("/search/:query")]
-        Search { query: String },
+        Search { query: Option<String> },
         #[route("/explore/:tag")]
         Explore { tag: String },
         #[route("/latest")]
@@ -44,10 +45,25 @@ pub enum Route {
         Register {},
         #[route("/forgot-password")]
         ForgotPassword {},
+        #[route("/reset-password")]
         #[route("/reset-password/:token")]
-        ResetPassword { token: String },
-        #[route("/settings")]
-        Settings {},
+        ResetPassword { token: Option<String> },
+        #[layout(crate::views::SettingsLayout)]
+            #[route("/settings")]
+            SettingsAccount {},
+            #[route("/settings/appearance")]
+            SettingsAppearance {},
+            #[route("/settings/downloads")]
+            SettingsDownloads {},
+            #[route("/settings/notifications")]
+            SettingsNotifications {},
+            #[cfg(feature = "desktop")]
+            #[route("/settings/system")]
+            SettingsSystem {},
+            #[cfg(feature = "desktop")]
+            #[route("/settings/keybinds")]
+            SettingsKeybinds {},
+        #[end_layout]
         #[route("/collections")]
         Collections {},
         #[route("/collection/:id")]
@@ -62,20 +78,31 @@ pub enum Route {
         FAQ {},
         #[route("/contact")]
         ContactUs {},
+        #[route("/dmca")]
+        Dmca {},
         #[route("/user/:username")]
         PublicProfile { username: String },
-        #[route("/admin")]
-        Admin {},
-        #[route("/admin/users")]
-        AdminUsers {},
-        #[route("/admin/reports")]
-        AdminReports {},
+        #[route("/user/:username/followers")]
+        UserFollowers { username: String },
+        #[route("/user/:username/following")]
+        UserFollowing { username: String },
+        #[layout(crate::views::admin::AdminLayout)]
+            #[route("/admin")]
+            AdminDashboard {},
+            #[route("/admin/users")]
+            AdminUsers {},
+            #[route("/admin/reports")]
+            AdminReports {},
+            #[route("/admin/dmca")]
+            AdminDmca {},
+        #[end_layout]
+        #[route("/:..route")]
+        NotFound { route: Vec<String> },
 }
 
 #[component]
 pub fn AppNavbar() -> Element {
-    #[allow(unused_mut)]
-    let mut show_search = use_context::<Signal<bool>>();
+    let show_search = use_context::<Signal<bool>>();
     let i18n = crate::i18n::use_i18n();
 
     let route = use_route::<Route>();
@@ -138,7 +165,7 @@ pub fn AppNavbar() -> Element {
             Navbar {
                 home_route: Route::Home {},
                 upload_route: Route::Upload {},
-                settings_route: Route::Settings {},
+                settings_route: Route::SettingsAccount {},
                 profile_route: Route::Profile {},
                 user: match user() {
                     AuthState::Authenticated(u) => Some(u),
@@ -205,7 +232,7 @@ pub fn AppNavbar() -> Element {
                             Link { to: Route::PrivacyPolicy {}, "{i18n.t(\"privacy\")}" }
                             if let AuthState::Authenticated(u) = user() {
                                 if u.role == "admin" || u.role == "super_admin" || u.role == "moderator" {
-                                    Link { to: Route::Admin {}, "{i18n.t(\"admin\")}" }
+                                    Link { to: Route::AdminDashboard {}, "{i18n.t(\"admin\")}" }
                                 }
                             }
                         }

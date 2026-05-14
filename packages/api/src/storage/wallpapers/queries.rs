@@ -48,6 +48,10 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
             _ => {}
         }
     }
+
+    if filters.safe_search {
+        q.push(" AND NOT (w.tags @> '[\"nsfw\"]')");
+    }
     if !filters.timeframe.is_empty() {
         match filters.timeframe.as_str() {
             "daily" => {
@@ -73,7 +77,7 @@ pub async fn load_all_wallpapers(
     filters: crate::FilterOptions,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
     let cache_key = format!("all:{:?}:{}:{:?}", cursor, limit, filters);
-    
+
     let cursor_cloned = cursor.clone();
     let filters_cloned = filters.clone();
     crate::storage::wallpapers::core::fetch_and_cache_wallpaper_list(cache_key, || async move {
@@ -147,7 +151,7 @@ pub async fn get_wallpapers_by_tag(
     filters: crate::FilterOptions,
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
     let cache_key = format!("tag:{}:{:?}:{}:{:?}", tag, cursor, limit, filters);
-    
+
     let tag_cloned = tag.to_string();
     let cursor_cloned = cursor.clone();
     let filters_cloned = filters.clone();
@@ -358,7 +362,6 @@ pub async fn get_similar_wallpapers_db(
 ) -> anyhow::Result<std::sync::Arc<Vec<Wallpaper>>> {
     let pool = get_pool()?;
 
-    // First get the embedding of the target wallpaper
     let target = sqlx::query!(
         "SELECT embedding as \"embedding?: pgvector::Vector\" FROM wallpapers WHERE id = $1",
         id
@@ -453,6 +456,8 @@ pub async fn get_similar_wallpapers_db(
                     is_live: r.is_live,
                     embedding: None,
                     phash: None,
+                    description: None,
+                    source_url: None,
                 });
             }
         }
@@ -478,6 +483,8 @@ pub async fn get_similar_wallpapers_db(
                     is_live: r.is_live,
                     embedding: None,
                     phash: None,
+                    description: None,
+                    source_url: None,
                 });
             }
         }

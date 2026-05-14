@@ -6,4 +6,6 @@ pub mod comments;
 pub mod admin;
 pub mod notifications;
 pub mod analytics;
+pub mod editorial;
+
 

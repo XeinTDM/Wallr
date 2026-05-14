@@ -19,6 +19,8 @@ pub struct Wallpaper {
     pub is_live: bool,
     pub embedding: Option<Vec<f32>>,
     pub phash: Option<Vec<u8>>,
+    pub description: Option<String>,
+    pub source_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -29,6 +31,7 @@ pub struct FilterOptions {
     pub color: String,
     pub ai_filter: String,
     pub timeframe: String,
+    pub safe_search: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -52,6 +55,18 @@ pub struct UserCollection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EditorialCollection {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub cover_url: Option<String>,
+    pub is_published: bool,
+    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub item_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct User {
     pub id: String,
     pub name: String,
@@ -64,6 +79,11 @@ pub struct User {
     pub is_banned: bool,
     pub active_playlist_id: Option<String>,
     pub playlist_interval_secs: i32,
+    pub email_notifs: bool,
+    pub push_notifs: bool,
+    pub download_quality: String,
+    pub auto_download_avif: bool,
+    pub safe_search: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

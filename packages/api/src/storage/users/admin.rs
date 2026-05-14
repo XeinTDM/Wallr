@@ -57,7 +57,7 @@ pub async fn get_recent_users_db(limit: u32) -> anyhow::Result<Vec<crate::User>>
     let limit = limit as i64;
 
     let rows = sqlx::query!(
-        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs FROM users ORDER BY created_at DESC LIMIT $1",
+        "SELECT id, name, email, pfp_url, banner_url, bio, social_links, role, is_banned, active_playlist_id, playlist_interval_secs, email_notifs, push_notifs, download_quality, auto_download_avif, safe_search FROM users ORDER BY created_at DESC LIMIT $1",
         limit
     )
     .fetch_all(pool)
@@ -77,6 +77,11 @@ pub async fn get_recent_users_db(limit: u32) -> anyhow::Result<Vec<crate::User>>
             is_banned: r.is_banned,
             active_playlist_id: r.active_playlist_id,
             playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
+            email_notifs: r.email_notifs,
+            push_notifs: r.push_notifs,
+            download_quality: r.download_quality,
+            auto_download_avif: r.auto_download_avif,
+            safe_search: r.safe_search,
         })
         .collect();
 

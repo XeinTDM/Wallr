@@ -5,6 +5,7 @@ pub mod notifications;
 #[cfg(feature = "desktop")]
 pub mod system;
 
+use crate::app::Route;
 use crate::LoadingScreen;
 use dioxus::prelude::*;
 use lucide_dioxus::{Bell, CloudDownload, Palette, User};
@@ -12,18 +13,6 @@ use lucide_dioxus::{Bell, CloudDownload, Palette, User};
 use lucide_dioxus::{Keyboard, Monitor};
 
 const SETTINGS_CSS: Asset = asset!("/assets/styling/settings.css");
-
-#[derive(PartialEq, Clone, Copy)]
-pub enum SettingsTab {
-    Account,
-    Appearance,
-    Downloads,
-    Notifications,
-    #[cfg(feature = "desktop")]
-    System,
-    #[cfg(feature = "desktop")]
-    Keybinds,
-}
 
 #[allow(unused_variables)]
 pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone + 'static>(
@@ -87,23 +76,9 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
 }
 
 #[component]
-pub fn Settings() -> Element {
-    let nav = use_navigator();
-    let user = use_context::<Signal<crate::app::AuthState>>();
-
-    let (real_username, real_email, real_pfp_url, real_bio, real_socials) = match user() {
-        crate::app::AuthState::Loading => return rsx! { LoadingScreen {} },
-        crate::app::AuthState::Unauthenticated => {
-            nav.push(crate::app::Route::Login {});
-            return rsx! {};
-        }
-        crate::app::AuthState::Authenticated(u) => {
-            (u.name, u.email, u.pfp_url, u.bio, u.social_links)
-        }
-    };
-
-    let mut active_tab = use_signal(|| SettingsTab::Account);
+pub fn SettingsLayout() -> Element {
     let i18n = crate::i18n::use_i18n();
+    let route = use_route::<Route>();
 
     rsx! {
         document::Stylesheet { href: SETTINGS_CSS }
@@ -119,31 +94,31 @@ pub fn Settings() -> Element {
                     class: "section-title",
                     "{i18n.t(\"settings_user_settings\")}"
                 }
-                button {
+                Link {
+                    to: Route::SettingsAccount {},
                     class: "settings-nav-item",
-                    class: if active_tab() == SettingsTab::Account { "active" },
-                    onclick: move |_| active_tab.set(SettingsTab::Account),
+                    active_class: "active",
                     User { size: 18 }
                     "{i18n.t(\"settings_account\")}"
                 }
-                button {
+                Link {
+                    to: Route::SettingsAppearance {},
                     class: "settings-nav-item",
-                    class: if active_tab() == SettingsTab::Appearance { "active" },
-                    onclick: move |_| active_tab.set(SettingsTab::Appearance),
+                    active_class: "active",
                     Palette { size: 18 }
                     "{i18n.t(\"settings_appearance\")}"
                 }
-                button {
+                Link {
+                    to: Route::SettingsDownloads {},
                     class: "settings-nav-item",
-                    class: if active_tab() == SettingsTab::Downloads { "active" },
-                    onclick: move |_| active_tab.set(SettingsTab::Downloads),
+                    active_class: "active",
                     CloudDownload { size: 18 }
                     "{i18n.t(\"settings_downloads\")}"
                 }
-                button {
+                Link {
+                    to: Route::SettingsNotifications {},
                     class: "settings-nav-item",
-                    class: if active_tab() == SettingsTab::Notifications { "active" },
-                    onclick: move |_| active_tab.set(SettingsTab::Notifications),
+                    active_class: "active",
                     Bell { size: 18 }
                     "{i18n.t(\"settings_notifications\")}"
                 }
@@ -157,17 +132,17 @@ pub fn Settings() -> Element {
                                 style: "margin-top: 24px;",
                                 "{i18n.t(\"settings_desktop_settings\")}"
                             }
-                            button {
+                            Link {
+                                to: Route::SettingsSystem {},
                                 class: "settings-nav-item",
-                                class: if active_tab() == SettingsTab::System { "active" },
-                                onclick: move |_| active_tab.set(SettingsTab::System),
+                                active_class: "active",
                                 Monitor { size: 18 }
                                 "{i18n.t(\"settings_system\")}"
                             }
-                            button {
+                            Link {
+                                to: Route::SettingsKeybinds {},
                                 class: "settings-nav-item",
-                                class: if active_tab() == SettingsTab::Keybinds { "active" },
-                                onclick: move |_| active_tab.set(SettingsTab::Keybinds),
+                                active_class: "active",
                                 Keyboard { size: 18 }
                                 "{i18n.t(\"settings_keybinds\")}"
                             }
@@ -184,61 +159,108 @@ pub fn Settings() -> Element {
             div {
                 class: "settings-content",
                 style: "flex: 1; max-width: 800px;",
-
-                div {
-                    class: "settings-header",
-                    h1 { "{i18n.t(\"settings_header\")}" }
-                    p {
-                        match active_tab() {
-                            SettingsTab::Account => i18n.t("settings_desc_account"),
-                            SettingsTab::Appearance => i18n.t("settings_desc_appearance"),
-                            SettingsTab::Downloads => i18n.t("settings_desc_downloads"),
-                            SettingsTab::Notifications => i18n.t("settings_desc_notifications"),
-                            #[cfg(feature = "desktop")]
-                            SettingsTab::System => i18n.t("settings_desc_system"),
-                            #[cfg(feature = "desktop")]
-                            SettingsTab::Keybinds => i18n.t("settings_desc_keybinds"),
-                        }
-                    }
-                }
-
-                if active_tab() == SettingsTab::Account {
-                    account::AccountSettings {
-                        real_username,
-                        real_email,
-                        real_pfp_url,
-                        real_bio,
-                        real_socials,
-                    }
-                }
-
-                if active_tab() == SettingsTab::Appearance {
-                    appearance::AppearanceSettings {}
-                }
-
-                if active_tab() == SettingsTab::Downloads {
-                    downloads::DownloadsSettings {}
-                }
-
-                if active_tab() == SettingsTab::Notifications {
-                    notifications::NotificationsSettings {}
-                }
-
-                {
-                    #[cfg(feature = "desktop")]
-                    {
-                        if active_tab() == SettingsTab::System {
-                            rsx! { system::SystemSettings {} }
-                        } else if active_tab() == SettingsTab::Keybinds {
-                            rsx! { system::KeybindsSettings {} }
-                        } else { rsx! {} }
-                    }
-                    #[cfg(not(feature = "desktop"))]
-                    {
-                        rsx! {}
-                    }
-                }
+                Outlet::<Route> {}
             }
         }
+    }
+}
+
+#[component]
+pub fn SettingsAccount() -> Element {
+    let nav = use_navigator();
+    let user = use_context::<Signal<crate::app::AuthState>>();
+    let i18n = crate::i18n::use_i18n();
+
+    let (real_username, real_email, real_pfp_url, real_bio, real_socials) = match user() {
+        crate::app::AuthState::Loading => return rsx! { LoadingScreen {} },
+        crate::app::AuthState::Unauthenticated => {
+            nav.push(Route::Login {});
+            return rsx! {};
+        }
+        crate::app::AuthState::Authenticated(u) => {
+            (u.name, u.email, u.pfp_url, u.bio, u.social_links)
+        }
+    };
+
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_account\")}" }
+        }
+        account::AccountSettings {
+            real_username,
+            real_email,
+            real_pfp_url,
+            real_bio,
+            real_socials,
+        }
+    }
+}
+
+#[component]
+pub fn SettingsAppearance() -> Element {
+    let i18n = crate::i18n::use_i18n();
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_appearance\")}" }
+        }
+        appearance::AppearanceSettings {}
+    }
+}
+
+#[component]
+pub fn SettingsDownloads() -> Element {
+    let i18n = crate::i18n::use_i18n();
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_downloads\")}" }
+        }
+        downloads::DownloadsSettings {}
+    }
+}
+
+#[component]
+pub fn SettingsNotifications() -> Element {
+    let i18n = crate::i18n::use_i18n();
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_notifications\")}" }
+        }
+        notifications::NotificationsSettings {}
+    }
+}
+
+#[cfg(feature = "desktop")]
+#[component]
+pub fn SettingsSystem() -> Element {
+    let i18n = crate::i18n::use_i18n();
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_system\")}" }
+        }
+        system::SystemSettings {}
+    }
+}
+
+#[cfg(feature = "desktop")]
+#[component]
+pub fn SettingsKeybinds() -> Element {
+    let i18n = crate::i18n::use_i18n();
+    rsx! {
+        div {
+            class: "settings-header",
+            h1 { "{i18n.t(\"settings_header\")}" }
+            p { "{i18n.t(\"settings_desc_keybinds\")}" }
+        }
+        system::KeybindsSettings {}
     }
 }

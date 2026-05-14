@@ -33,6 +33,7 @@ pub use endpoints::comments::*;
 pub use endpoints::admin::*;
 pub use endpoints::notifications::*;
 pub use endpoints::analytics::*;
+pub use endpoints::editorial::*;
 
 #[cfg(feature = "server")]
 pub fn get_heavy_runtime() -> &'static tokio::runtime::Runtime {

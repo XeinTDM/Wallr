@@ -39,8 +39,8 @@ fn main() {
             axum::extract::Path(id): axum::extract::Path<String>,
             axum::extract::Query(query): axum::extract::Query<DownloadQuery>,
         ) -> impl axum::response::IntoResponse {
-            use axum::response::Redirect;
             use axum::http::StatusCode;
+            use axum::response::Redirect;
 
             if id.contains('.') || id.contains('/') || id.contains('\\') {
                 return (StatusCode::BAD_REQUEST, "Invalid ID".to_string()).into_response();
@@ -53,13 +53,17 @@ fn main() {
                     let mut authorized = false;
                     if let Some(token_str) = extract_session_token(&headers) {
                         if let Ok(user) = api::storage::verify_token(&token_str).await {
-                            if user.id == wp.author_id || user.role == "admin" || user.role == "super_admin" {
+                            if user.id == wp.author_id
+                                || user.role == "admin"
+                                || user.role == "super_admin"
+                            {
                                 authorized = true;
                             }
                         }
                     }
                     if !authorized {
-                        return (StatusCode::FORBIDDEN, "Access denied to private wallpaper").into_response();
+                        return (StatusCode::FORBIDDEN, "Access denied to private wallpaper")
+                            .into_response();
                     }
                 }
             } else {
@@ -77,7 +81,6 @@ fn main() {
             let mut height = query.height;
             let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
 
-            // Enforce dimension caps to prevent DoS (max 8k resolution)
             if let Some(w) = width {
                 if w > 7680 {
                     width = Some(7680);
@@ -105,9 +108,10 @@ fn main() {
             }
 
             if ip == "unknown"
-                && let Some(token) = extract_session_token(&headers) {
-                    ip = format!("session_{}", token);
-                }
+                && let Some(token) = extract_session_token(&headers)
+            {
+                ip = format!("session_{}", token);
+            }
 
             let download_id = id.clone();
             let download_ip = ip.clone();
@@ -115,12 +119,14 @@ fn main() {
             tokio::spawn(async move {
                 let _ = api::storage::increment_download(&download_id, &download_ip).await;
                 if let Some(token_str) = token_opt
-                    && let Ok(user) = api::storage::verify_token(&token_str).await {
-                        let _ = api::storage::record_user_download_db(&user.id, &download_id).await;
-                    }
+                    && let Ok(user) = api::storage::verify_token(&token_str).await
+                {
+                    let _ = api::storage::record_user_download_db(&user.id, &download_id).await;
+                }
             });
 
-            let public_url = std::env::var("R2_PUBLIC_URL").unwrap_or_else(|_| "https://cdn.example.com".to_string());
+            let public_url = std::env::var("R2_PUBLIC_URL")
+                .unwrap_or_else(|_| "https://cdn.example.com".to_string());
             let is_native_format = format == "avif" || format == "jpg" || format == "png";
 
             let content_type = match format.as_str() {
@@ -136,24 +142,43 @@ fn main() {
                     if let Ok(resp) = reqwest::get(&target_url).await {
                         if resp.status().is_success() {
                             if let Ok(bytes) = resp.bytes().await {
-                                return (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
+                                return (
+                                    axum::http::StatusCode::OK,
+                                    [(axum::http::header::CONTENT_TYPE, content_type)],
+                                    bytes,
+                                )
+                                    .into_response();
                             }
                         }
                     }
-                    return (StatusCode::NOT_FOUND, "Private source image not found on CDN").into_response();
+                    return (
+                        StatusCode::NOT_FOUND,
+                        "Private source image not found on CDN",
+                    )
+                        .into_response();
                 } else {
                     return Redirect::temporary(&target_url).into_response();
                 }
             }
 
-            let variant_suffix = format!("{}x{}_{}", width.unwrap_or(0), height.unwrap_or(0), crop_val);
+            let variant_suffix = format!(
+                "{}x{}_{}",
+                width.unwrap_or(0),
+                height.unwrap_or(0),
+                crop_val
+            );
             let variant_url = format!("{}/{}_{}.{}", public_url, id, variant_suffix, format);
 
             if let Ok(resp) = reqwest::get(&variant_url).await {
                 if resp.status().is_success() {
                     if is_private {
                         if let Ok(bytes) = resp.bytes().await {
-                            return (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
+                            return (
+                                axum::http::StatusCode::OK,
+                                [(axum::http::header::CONTENT_TYPE, content_type)],
+                                bytes,
+                            )
+                                .into_response();
                         }
                     } else {
                         return Redirect::temporary(&variant_url).into_response();
@@ -161,23 +186,34 @@ fn main() {
                 }
             }
 
-            static CONVERSION_SEMAPHORE: std::sync::LazyLock<tokio::sync::Semaphore> = std::sync::LazyLock::new(|| tokio::sync::Semaphore::new(4));
+            static CONVERSION_SEMAPHORE: std::sync::LazyLock<tokio::sync::Semaphore> =
+                std::sync::LazyLock::new(|| tokio::sync::Semaphore::new(4));
             let _permit = match CONVERSION_SEMAPHORE.acquire().await {
                 Ok(p) => p,
-                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Server too busy").into_response(),
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Server too busy").into_response();
+                }
             };
 
             let master_url_avif = format!("{}/{}_master.avif", public_url, id);
             let master_url_jpg = format!("{}/{}_master.jpg", public_url, id);
 
             let data = match reqwest::get(&master_url_avif).await {
-                Ok(resp) if resp.status().is_success() => resp.bytes().await.unwrap_or_default().to_vec(),
-                _ => {
-                    match reqwest::get(&master_url_jpg).await {
-                        Ok(resp) if resp.status().is_success() => resp.bytes().await.unwrap_or_default().to_vec(),
-                        _ => return (StatusCode::NOT_FOUND, "Source image not found on CDN".to_string()).into_response(),
-                    }
+                Ok(resp) if resp.status().is_success() => {
+                    resp.bytes().await.unwrap_or_default().to_vec()
                 }
+                _ => match reqwest::get(&master_url_jpg).await {
+                    Ok(resp) if resp.status().is_success() => {
+                        resp.bytes().await.unwrap_or_default().to_vec()
+                    }
+                    _ => {
+                        return (
+                            StatusCode::NOT_FOUND,
+                            "Source image not found on CDN".to_string(),
+                        )
+                            .into_response();
+                    }
+                },
             };
 
             let format_str = format.clone();
@@ -190,13 +226,14 @@ fn main() {
                 let perform_resize = width.is_some() || height.is_some();
                 if perform_resize {
                     use fast_image_resize as fr;
-                    
+
                     let src_image = fr::images::Image::from_vec_u8(
                         img.width(),
                         img.height(),
                         img.to_rgba8().into_raw(),
                         fr::PixelType::U8x4,
-                    ).map_err(|e| format!("FR Error: {:?}", e))?;
+                    )
+                    .map_err(|e| format!("FR Error: {:?}", e))?;
 
                     let mut dst_width = img.width();
                     let mut dst_height = img.height();
@@ -240,29 +277,37 @@ fn main() {
                             dst_height = (img.height() as f64 * scale) as u32;
                         }
                     } else if let Some(h) = height
-                        && h < img.height() {
-                            dst_height = h;
-                            let scale = h as f64 / img.height() as f64;
-                            dst_width = (img.width() as f64 * scale) as u32;
-                        }
+                        && h < img.height()
+                    {
+                        dst_height = h;
+                        let scale = h as f64 / img.height() as f64;
+                        dst_width = (img.width() as f64 * scale) as u32;
+                    }
 
-                    if dst_width == 0 { dst_width = 1; }
-                    if dst_height == 0 { dst_height = 1; }
+                    if dst_width == 0 {
+                        dst_width = 1;
+                    }
+                    if dst_height == 0 {
+                        dst_height = 1;
+                    }
 
-                    let mut dst_image = fr::images::Image::new(dst_width, dst_height, fr::PixelType::U8x4);
+                    let mut dst_image =
+                        fr::images::Image::new(dst_width, dst_height, fr::PixelType::U8x4);
                     let mut resizer = fr::Resizer::new();
 
-                    resizer.resize(
-                        &src_image,
-                        &mut dst_image,
-                        &fr::ResizeOptions::new()
-                            .resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3))
-                            .crop(crop_left, crop_top, crop_width, crop_height),
-                    ).map_err(|e| format!("FR Resize Error: {:?}", e))?;
+                    resizer
+                        .resize(
+                            &src_image,
+                            &mut dst_image,
+                            &fr::ResizeOptions::new()
+                                .resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3))
+                                .crop(crop_left, crop_top, crop_width, crop_height),
+                        )
+                        .map_err(|e| format!("FR Resize Error: {:?}", e))?;
 
                     img = image::DynamicImage::ImageRgba8(
                         image::RgbaImage::from_raw(dst_width, dst_height, dst_image.into_vec())
-                            .ok_or("Failed to create RgbaImage")?
+                            .ok_or("Failed to create RgbaImage")?,
                     );
                 }
 
@@ -296,12 +341,21 @@ fn main() {
             match api::storage::save_image_file(&id, &variant_suffix, &format, &out_bytes).await {
                 Ok(new_url) => {
                     if is_private {
-                        (axum::http::StatusCode::OK, [(axum::http::header::CONTENT_TYPE, content_type)], out_bytes).into_response()
+                        (
+                            axum::http::StatusCode::OK,
+                            [(axum::http::header::CONTENT_TYPE, content_type)],
+                            out_bytes,
+                        )
+                            .into_response()
                     } else {
                         Redirect::temporary(&new_url).into_response()
                     }
-                },
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to upload variant: {}", e)).into_response(),
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to upload variant: {}", e),
+                )
+                    .into_response(),
             }
         }
 
@@ -314,6 +368,18 @@ fn main() {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("Untitled")
                 .to_string();
+
+            let description = headers
+                .get("X-Description")
+                .and_then(|v| v.to_str().ok())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let source_url = headers
+                .get("X-Source")
+                .and_then(|v| v.to_str().ok())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
 
             let auth_user = {
                 let token = extract_session_token(&headers);
@@ -350,7 +416,18 @@ fn main() {
                 .map(|v| v == "true")
                 .unwrap_or(false);
 
-            match api::upload_raw_impl(title, author_id, author_name, user_tags, body.to_vec(), is_private).await {
+            match api::upload_raw_impl(
+                title,
+                description,
+                source_url,
+                author_id,
+                author_name,
+                user_tags,
+                body.to_vec(),
+                is_private,
+            )
+            .await
+            {
                 Ok(id) => axum::response::Response::new(id.into()),
                 Err(e) => {
                     let mut res = axum::response::Response::new(e.to_string().into());
@@ -395,14 +472,14 @@ fn main() {
                     if let Ok(Some(record)) = api::storage::get_user_by_id(&user_id).await
                         && let Ok(new_token) =
                             api::storage::generate_token(&record.user, record.token_version)
-                        {
-                            let cookie = format!(
-                                "session_token={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000",
-                                new_token
-                            );
-                            res.headers_mut()
-                                .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
-                        }
+                    {
+                        let cookie = format!(
+                            "session_token={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000",
+                            new_token
+                        );
+                        res.headers_mut()
+                            .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+                    }
                     res
                 }
                 Err(e) => {
@@ -495,7 +572,8 @@ fn main() {
                 });
             }
 
-            let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
+            let redis_url = std::env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
             if let Err(e) = api::storage::init_redis(&redis_url) {
                 eprintln!("⚠️ Redis initialization failed: {}. Caching will fail.", e);
             } else {
@@ -511,8 +589,14 @@ fn main() {
                     "/assets/uploads",
                     tower_http::services::ServeDir::new("packages/ui/assets/uploads"),
                 )
-                .route("/api/upload_raw", post(upload_raw_handler).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
-                .route("/api/upload_media", post(upload_media_handler).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
+                .route(
+                    "/api/upload_raw",
+                    post(upload_raw_handler).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
+                )
+                .route(
+                    "/api/upload_media",
+                    post(upload_media_handler).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
+                )
                 .route("/api/export_data", get(export_data_handler))
                 .nest("/api/oauth", api::oauth::oauth_router())
                 .route("/wallpaper/{id}/download", get(download_handler))
@@ -532,16 +616,16 @@ fn App() -> Element {
 
     rsx! {
         document::Title { "Wallr | Optimal Wallpaper Engine" }
-        document::Meta { name: "description", content: "A hyper-optimized wallpaper platform. AVIF-native, zero-latency focused, and powered by local AI." }
+        document::Meta {
+            name: "description",
+            content: "A hyper-optimized wallpaper platform. AVIF-native, zero-latency focused, and powered by local AI.",
+        }
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1" }
         document::Link { rel: "icon", href: FAVICON }
         Theme {}
         ToastContainer {}
         document::Stylesheet { href: MAIN_CSS }
 
-        SuspenseBoundary {
-            fallback: |_| rsx! {},
-            Router::<Route> {}
-        }
+        SuspenseBoundary { fallback: |_| rsx! {}, Router::<Route> {} }
     }
 }

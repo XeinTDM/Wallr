@@ -1,13 +1,55 @@
-use super::use_stored_signal;
 use dioxus::prelude::*;
 use lucide_dioxus::{CloudDownload, Eye};
 
 #[component]
 pub fn DownloadsSettings() -> Element {
     let i18n = crate::i18n::use_i18n();
-    let mut quality = use_stored_signal("settings_quality", "Original (4K+)".to_string());
-    let mut auto_download_avif = use_stored_signal("settings_auto_download_avif", true);
-    let mut safe_search = use_stored_signal("settings_safe_search", true);
+    let mut toaster = crate::use_toaster();
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    
+    let mut quality = use_signal(|| "Original (4K+)".to_string());
+    let mut auto_download_avif = use_signal(|| true);
+    let mut safe_search = use_signal(|| true);
+    
+    // Additional signals to trigger update without infinite loops
+    let mut initialized = use_signal(|| false);
+
+    use_effect(move || {
+        if let crate::app::AuthState::Authenticated(u) = user_ctx() {
+            if !initialized() {
+                quality.set(u.download_quality.clone());
+                auto_download_avif.set(u.auto_download_avif);
+                safe_search.set(u.safe_search);
+                initialized.set(true);
+            }
+        }
+    });
+
+    let q_val = quality();
+    let avif_val = auto_download_avif();
+    let ss_val = safe_search();
+    let init_val = initialized();
+    let user_state = user_ctx();
+
+    use_effect(move || {
+        if init_val {
+            if let crate::app::AuthState::Authenticated(u) = &user_state {
+                let u = u.clone();
+                let q_val_clone = q_val.clone();
+                spawn(async move {
+                    if let Err(e) = api::update_preferences(
+                        u.email_notifs,
+                        u.push_notifs,
+                        q_val_clone,
+                        avif_val,
+                        ss_val
+                    ).await {
+                        toaster.error(format!("Failed to save preferences: {}", e));
+                    }
+                });
+            }
+        }
+    });
 
     rsx! {
         div {

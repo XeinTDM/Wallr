@@ -1,0 +1,6 @@
+ALTER TABLE users
+ADD COLUMN email_notifs BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN push_notifs BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN download_quality TEXT NOT NULL DEFAULT 'Original (4K+)',
+ADD COLUMN auto_download_avif BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN safe_search BOOLEAN NOT NULL DEFAULT true;

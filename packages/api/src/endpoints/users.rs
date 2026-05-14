@@ -131,6 +131,27 @@ pub async fn delete_my_account() -> Result<(), ServerFnError> {
 }
 
 #[server]
+pub async fn update_preferences(
+    email_notifs: bool,
+    push_notifs: bool,
+    download_quality: String,
+    auto_download_avif: bool,
+    safe_search: bool,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::users::update_user_preferences_db(
+        &user.id,
+        email_notifs,
+        push_notifs,
+        &download_quality,
+        auto_download_avif,
+        safe_search,
+    )
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
 pub async fn set_active_playlist(
     collection_id: Option<String>,
     interval_secs: Option<i32>,

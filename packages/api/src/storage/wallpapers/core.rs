@@ -1,6 +1,6 @@
-use crate::storage::get_pool;
 use crate::Wallpaper;
 use crate::storage::cache::get_wallpaper_cache;
+use crate::storage::get_pool;
 
 pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     use sqlx::Row;
@@ -15,6 +15,8 @@ pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     let is_private: bool = row.get("is_private");
     let is_live: bool = row.try_get("is_live").unwrap_or(false);
     let phash: Option<Vec<u8>> = row.try_get("phash").unwrap_or(None);
+    let description: Option<String> = row.try_get("description").unwrap_or(None);
+    let source_url: Option<String> = row.try_get("source_url").unwrap_or(None);
 
     Wallpaper {
         id: row.get("id"),
@@ -34,6 +36,8 @@ pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
         is_live,
         embedding: None,
         phash,
+        description,
+        source_url,
     }
 }
 
@@ -97,7 +101,7 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
     }
 
     let pool = get_pool()?;
-    let row = sqlx::query!(r#"SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1"#, id)
+    let row = sqlx::query!(r#"SELECT w.id, w.title, w.description, w.source_url, w.author_id, u.name as "author_name!", w.image_url, thumbnail_url, tags as "tags: sqlx::types::Json<Vec<String>>", primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", width, height, size_bytes, likes, downloads, w.created_at, is_private, is_live FROM wallpapers w JOIN users u ON w.author_id = u.id WHERE w.id = $1"#, id)
         .fetch_optional(pool)
         .await?;
 
@@ -118,7 +122,9 @@ pub async fn get_wallpaper_by_id(id: &str) -> anyhow::Result<Option<Wallpaper>> 
         is_private: r.is_private,
         is_live: r.is_live,
         embedding: None,
-        phash: None, // We don't need to load phash into memory for general queries unless necessary
+        phash: None,
+        description: r.description,
+        source_url: r.source_url,
     });
     cache.insert(id.to_string(), result.clone()).await;
     Ok(result)
@@ -141,7 +147,9 @@ pub async fn update_wallpaper_db(
     .execute(pool)
     .await?;
 
-    crate::storage::cache::get_wallpaper_cache().remove(id).await;
+    crate::storage::cache::get_wallpaper_cache()
+        .remove(id)
+        .await;
     crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
     Ok(())
 }
@@ -161,7 +169,9 @@ pub async fn delete_wallpaper(id: &str) -> anyhow::Result<()> {
 
     tx.commit().await?;
 
-    crate::storage::cache::get_wallpaper_cache().remove(id).await;
+    crate::storage::cache::get_wallpaper_cache()
+        .remove(id)
+        .await;
     crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
 
     let storage_path = crate::storage::files::get_storage_path();
@@ -208,18 +218,26 @@ pub async fn create_upload_job(id: &str, user_id: &str, title: &str) -> anyhow::
     let pool = get_pool()?;
     sqlx::query!(
         "INSERT INTO upload_jobs (id, user_id, title) VALUES ($1, $2, $3)",
-        id, user_id, title
+        id,
+        user_id,
+        title
     )
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn update_upload_job_status(id: &str, status: &str, error_message: Option<&str>) -> anyhow::Result<()> {
+pub async fn update_upload_job_status(
+    id: &str,
+    status: &str,
+    error_message: Option<&str>,
+) -> anyhow::Result<()> {
     let pool = get_pool()?;
     sqlx::query!(
         "UPDATE upload_jobs SET status = $1, error_message = $2 WHERE id = $3",
-        status, error_message, id
+        status,
+        error_message,
+        id
     )
     .execute(pool)
     .await?;
@@ -261,7 +279,7 @@ where
                 crate::storage::wallpapers::get_wallpaper_by_id(&id).await
             }));
         }
-        
+
         let mut results = Vec::with_capacity(handles.len());
         for handle in handles {
             if let Ok(Ok(Some(wp))) = handle.await {

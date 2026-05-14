@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use lucide_dioxus::{ArrowRight, Key};
 
 #[component]
-pub fn ResetPassword(token: String) -> Element {
+pub fn ResetPassword(token: Option<String>) -> Element {
     let mut password = use_signal(String::new);
     let mut confirm_password = use_signal(String::new);
     let mut error = use_signal(|| Option::<String>::None);
@@ -12,6 +12,7 @@ pub fn ResetPassword(token: String) -> Element {
     let mut toaster = crate::toast::use_toaster();
     let i18n = crate::i18n::use_i18n();
 
+    let token_for_submit = token.clone();
     let on_submit = move |e: Event<FormData>| {
         e.prevent_default();
 
@@ -25,12 +26,21 @@ pub fn ResetPassword(token: String) -> Element {
             return;
         }
 
-        let token_for_spawn = token.clone();
+        let token_for_spawn = token_for_submit.clone();
         spawn(async move {
             is_loading.set(true);
             error.set(None);
 
-            match api::reset_password_with_token(token_for_spawn, password()).await {
+            let t = match &token_for_spawn {
+                Some(t) if !t.is_empty() => t.clone(),
+                _ => {
+                    error.set(Some("Invalid or missing reset token.".to_string()));
+                    is_loading.set(false);
+                    return;
+                }
+            };
+
+            match api::reset_password_with_token(t, password()).await {
                 Ok(_) => {
                     success.set(true);
                     toaster.success(i18n.t("success_password_reset"));
@@ -64,6 +74,18 @@ pub fn ResetPassword(token: String) -> Element {
                             class: "btn-primary glow-hover",
                             style: "padding: 16px; border-radius: 16px; font-weight: 800; color: white; background: var(--accent-primary, #3b82f6); border: none; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;",
                             "{i18n.t(\"btn_log_in\")}"
+                            ArrowRight { size: 20 }
+                        }
+                    }
+                } else if token.is_none() || token.as_ref().is_some_and(|t| t.is_empty()) {
+                    div {
+                        style: "margin-top: 24px;",
+                        p { style: "color: #ff4d4d; font-weight: 600; margin-bottom: 32px;", "Invalid or missing reset token." }
+                        Link {
+                            to: Route::ForgotPassword {},
+                            class: "btn-primary glow-hover",
+                            style: "padding: 16px; border-radius: 16px; font-weight: 800; color: white; background: var(--accent-primary, #3b82f6); border: none; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;",
+                            "Request New Reset Link"
                             ArrowRight { size: 20 }
                         }
                     }
@@ -112,7 +134,11 @@ pub fn ResetPassword(token: String) -> Element {
                             cursor: if is_loading() { "not-allowed" } else { "pointer" },
                             disabled: is_loading(),
                             Key { size: 20 }
-                            if is_loading() { "{i18n.t(\"resetting\")}" } else { "{i18n.t(\"btn_reset_password\")}" }
+                            if is_loading() {
+                                "{i18n.t(\"resetting\")}"
+                            } else {
+                                "{i18n.t(\"btn_reset_password\")}"
+                            }
                         }
                     }
                 }

@@ -1,6 +1,6 @@
+use crate::auth::*;
 use crate::models::*;
 use dioxus::prelude::*;
-use crate::auth::*;
 
 #[server]
 pub async fn admin_delete_wallpaper(
@@ -164,14 +164,12 @@ pub async fn resolve_report(report_id: String, action: String) -> Result<(), Ser
 #[server]
 pub async fn update_user_role(user_id: String, new_role: String) -> Result<(), ServerFnError> {
     let admin = require_admin().await?;
-    
-    // Role allowlist
+
     let valid_roles = ["user", "moderator", "admin", "super_admin"];
     if !valid_roles.contains(&new_role.as_str()) {
         return Err(ServerFnError::new("Invalid role"));
     }
 
-    // Prevent self-modification
     if admin.id == user_id {
         return Err(ServerFnError::new("Cannot modify own role"));
     }
@@ -185,13 +183,16 @@ pub async fn update_user_role(user_id: String, new_role: String) -> Result<(), S
         None => return Err(ServerFnError::new("User not found")),
     };
 
-    // Hierarchy check: Only super_admin can modify a super_admin or grant super_admin
     if target_user.user.role == "super_admin" && admin.role != "super_admin" {
-        return Err(ServerFnError::new("Only a super_admin can modify another super_admin"));
+        return Err(ServerFnError::new(
+            "Only a super_admin can modify another super_admin",
+        ));
     }
-    
+
     if new_role == "super_admin" && admin.role != "super_admin" {
-        return Err(ServerFnError::new("Only a super_admin can grant super_admin role"));
+        return Err(ServerFnError::new(
+            "Only a super_admin can grant super_admin role",
+        ));
     }
 
     crate::storage::update_user_role_db(&user_id, &new_role)
@@ -235,5 +236,3 @@ pub async fn resolve_dmca_claim(claim_id: String, action: String) -> Result<(), 
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
-
-

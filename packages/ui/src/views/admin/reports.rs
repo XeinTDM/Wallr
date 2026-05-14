@@ -53,7 +53,7 @@ pub fn AdminReports() -> Element {
             div {
                 style: "display: flex; align-items: center; gap: 16px; margin-bottom: 32px;",
                 Link {
-                    to: Route::Admin {},
+                    to: Route::AdminDashboard {},
                     style: "color: var(--text-secondary); display: flex; align-items: center; gap: 8px; text-decoration: none;",
                     ArrowLeft { size: 20 }
                     "{i18n.t(\"admin_back\")}"

@@ -250,8 +250,13 @@ pub async fn register(name: String, email: String, password: String) -> Result<(
         role: "user".to_string(),
         is_banned: false,
         active_playlist_id: None,
-        playlist_interval_secs: 3600,
-    };
+        playlist_interval_secs: 300,
+        email_notifs: true,
+        push_notifs: false,
+        download_quality: "Original (4K+)".to_string(),
+        auto_download_avif: true,
+        safe_search: true,
+        };
 
     let record = UserRecord {
         user: new_user.clone(),
@@ -413,10 +418,43 @@ pub async fn request_password_reset(email: String) -> Result<(), ServerFnError> 
             .await
             .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
-        println!("----------------------------------------");
-        println!("PASSWORD RESET REQUESTED FOR: {}", email);
-        println!("Reset Link: http://localhost:8080/reset-password/{}", token);
-        println!("----------------------------------------");
+        let reset_link = format!("http://localhost:8080/reset-password/{}", token);
+
+        let smtp_username = std::env::var("SMTP_USERNAME").unwrap_or_default();
+        let smtp_password = std::env::var("SMTP_PASSWORD").unwrap_or_default();
+        let smtp_server = std::env::var("SMTP_SERVER").unwrap_or_default();
+        let smtp_from = std::env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@wallr.example.com".to_string());
+
+        if !smtp_server.is_empty() && !smtp_username.is_empty() && !smtp_password.is_empty() {
+            use lettre::{AsyncSmtpTransport, Tokio1Executor, AsyncTransport};
+            use lettre::message::Message;
+            use lettre::transport::smtp::authentication::Credentials;
+            
+            let creds = Credentials::new(smtp_username, smtp_password);
+            
+            let mailer: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)
+                .unwrap()
+                .credentials(creds)
+                .build();
+                
+            let email_msg = Message::builder()
+                .from(smtp_from.parse().unwrap())
+                .to(email.parse().unwrap())
+                .subject("Wallr - Password Reset Request")
+                .body(format!(
+                    "A password reset was requested for your Wallr account.\n\nPlease click the link below to reset your password:\n\n{}\n\nIf you did not request this, you can safely ignore this email.",
+                    reset_link
+                ))
+                .unwrap();
+                
+            let _ = mailer.send(email_msg).await;
+        } else {
+            // Fallback for development if SMTP is not configured
+            println!("----------------------------------------");
+            println!("PASSWORD RESET REQUESTED FOR: {}", email);
+            println!("Reset Link: {}", reset_link);
+            println!("----------------------------------------");
+        }
     }
 
     Ok(())

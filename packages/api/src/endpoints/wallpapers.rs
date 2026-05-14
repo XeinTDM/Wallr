@@ -22,6 +22,10 @@ pub async fn get_wallpapers_by_tag(
     limit: u32,
     filters: FilterOptions,
 ) -> Result<std::sync::Arc<Vec<Wallpaper>>, ServerFnError> {
+    let mut filters = filters;
+    if let Some(user) = require_auth().await.ok() {
+        filters.safe_search = user.safe_search;
+    }
     let tag = tag.to_lowercase();
     if tag == "featured" || tag == "popular" || tag == "latest" || tag == "all" {
         return get_wallpapers(cursor, limit, filters).await;

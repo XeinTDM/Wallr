@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 use ui::app::Route;
 
+mod win32_wallpaper;
+
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
@@ -178,7 +180,8 @@ fn App() -> Element {
                             last_sync = Some(std::time::Instant::now());
                             let mut rng = rand::thread_rng();
                             if let Some(wp) = playlist.choose(&mut rng) {
-                                apply_wallpaper(wp.clone()).await;
+                                let window = dioxus::desktop::window();
+                                apply_wallpaper(window, wp.clone()).await;
                             }
                         }
                     }
@@ -237,7 +240,8 @@ fn App() -> Element {
                             if !candidates.is_empty() {
                                 let mut rng = rand::thread_rng();
                                 if let Some(wp) = candidates.choose(&mut rng) {
-                                    apply_wallpaper(wp.clone()).await;
+                                    let window = dioxus::desktop::window();
+                                    apply_wallpaper(window, wp.clone()).await;
                                 }
                             }
                         } else if event.id == id_h {
@@ -284,9 +288,19 @@ fn App() -> Element {
             .join(file_name);
 
         let data = std::fs::read(&full_path).unwrap_or_default();
+        
+        let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let mime = match ext {
+            "mp4" => "video/mp4",
+            "webm" => "video/webm",
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            _ => "image/avif",
+        };
 
         let response = dioxus::desktop::wry::http::Response::builder()
-            .header("Content-Type", "image/avif")
+            .header("Content-Type", mime)
             .header("Access-Control-Allow-Origin", "*")
             .body(data)
             .unwrap();
@@ -307,23 +321,105 @@ fn App() -> Element {
 }
 
 #[cfg(feature = "desktop")]
-async fn apply_wallpaper(wp: api::Wallpaper) {
-    let image_url = wp.image_url.clone();
-    let wp_id = wp.id.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        let filename = image_url
-            .strip_prefix("/assets/uploads/")
-            .unwrap_or(&image_url);
-        let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../ui/assets/uploads")
-            .join(filename);
-        if let Ok(img) = image::open(&full_path) {
-            let temp_dir = std::env::temp_dir();
-            let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
-            if img.save(&temp_path).is_ok() {
-                let _ = wallpaper::set_from_path(temp_path.to_str().unwrap());
+#[derive(Props, Clone, PartialEq)]
+struct LiveWallpaperProps {
+    url: String,
+}
+
+#[cfg(feature = "desktop")]
+static LIVE_WP_URL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+#[cfg(feature = "desktop")]
+#[component]
+fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
+    let window = dioxus::desktop::window();
+    let url_clone = props.url.clone();
+    
+    use_hook(move || {
+        let tao_window = window.window.clone();
+        #[cfg(target_os = "windows")]
+        {
+            use dioxus::desktop::tao::platform::windows::WindowExtWindows;
+            let hwnd = tao_window.hwnd();
+            crate::win32_wallpaper::windows_wallpaper::attach_to_desktop(hwnd as isize);
+        }
+        
+        let window_clone = window.clone();
+        spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if let Ok(guard) = LIVE_WP_URL.lock() {
+                    if *guard != url_clone {
+                        window_clone.close();
+                        break;
+                    }
+                }
+            }
+        });
+    });
+
+    rsx! {
+        div {
+            style: "width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; background: black;",
+            video {
+                src: "{props.url}",
+                autoplay: true,
+                loop: true,
+                muted: true,
+                style: "width: 100%; height: 100%; object-fit: cover; object-position: center;"
             }
         }
-    })
-    .await;
+    }
+}
+
+#[cfg(feature = "desktop")]
+async fn apply_wallpaper(
+    window: dioxus::desktop::DesktopContext,
+    wp: api::Wallpaper,
+) {
+    if wp.is_live {
+        use dioxus::desktop::{Config, WindowBuilder};
+        let filename = wp.image_url.strip_prefix("/assets/uploads/").unwrap_or(&wp.image_url);
+        let url = format!("/upload/{}", filename);
+        
+        if let Ok(mut guard) = LIVE_WP_URL.lock() {
+            if *guard == url {
+                return; // Already playing this live wallpaper
+            }
+            *guard = url.clone();
+        }
+
+        let dom = dioxus::core::VirtualDom::new_with_props(LiveWallpaperView, LiveWallpaperProps { url });
+        let wb = WindowBuilder::new()
+            .with_title("Wallr Live Background")
+            .with_decorations(false)
+            .with_always_on_bottom(true)
+            .with_maximized(true);
+
+        let cfg = Config::new().with_window(wb);
+        window.new_window(dom, cfg);
+    } else {
+        if let Ok(mut guard) = LIVE_WP_URL.lock() {
+            *guard = String::new(); // Stop any active live wallpaper
+        }
+
+        let image_url = wp.image_url.clone();
+        let wp_id = wp.id.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            let filename = image_url
+                .strip_prefix("/assets/uploads/")
+                .unwrap_or(&image_url);
+            let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../ui/assets/uploads")
+                .join(filename);
+            if let Ok(img) = image::open(&full_path) {
+                let temp_dir = std::env::temp_dir();
+                let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
+                if img.save(&temp_path).is_ok() {
+                    let _ = wallpaper::set_from_path(temp_path.to_str().unwrap());
+                }
+            }
+        })
+        .await;
+    }
 }

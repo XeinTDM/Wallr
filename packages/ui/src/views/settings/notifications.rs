@@ -1,12 +1,50 @@
-use super::use_stored_signal;
 use dioxus::prelude::*;
 use lucide_dioxus::Bell;
 
 #[component]
 pub fn NotificationsSettings() -> Element {
     let i18n = crate::i18n::use_i18n();
-    let mut email_notifs = use_stored_signal("settings_email_notifs", true);
-    let mut push_notifs = use_stored_signal("settings_push_notifs", false);
+    let mut toaster = crate::use_toaster();
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    
+    let mut email_notifs = use_signal(|| true);
+    let mut push_notifs = use_signal(|| false);
+    
+    let mut initialized = use_signal(|| false);
+
+    use_effect(move || {
+        if let crate::app::AuthState::Authenticated(u) = user_ctx() {
+            if !initialized() {
+                email_notifs.set(u.email_notifs);
+                push_notifs.set(u.push_notifs);
+                initialized.set(true);
+            }
+        }
+    });
+
+    let en_val = email_notifs();
+    let pn_val = push_notifs();
+    let init_val = initialized();
+    let user_state = user_ctx();
+
+    use_effect(move || {
+        if init_val {
+            if let crate::app::AuthState::Authenticated(u) = &user_state {
+                let u = u.clone();
+                spawn(async move {
+                    if let Err(e) = api::update_preferences(
+                        en_val,
+                        pn_val,
+                        u.download_quality,
+                        u.auto_download_avif,
+                        u.safe_search
+                    ).await {
+                        toaster.error(format!("Failed to save preferences: {}", e));
+                    }
+                });
+            }
+        }
+    });
 
     rsx! {
         div {

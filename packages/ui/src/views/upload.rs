@@ -123,8 +123,27 @@ pub fn Upload() -> Element {
             match res {
                 Ok(resp) if resp.ok() => {
                     let id = resp.text().await.unwrap_or_default();
-                    toaster.success(i18n.t("success_upload_published"));
-                    nav.push(crate::app::Route::WallpaperDetail { id });
+                    let mut is_completed = false;
+                    for _ in 0..60 {
+                        gloo_timers::future::TimeoutFuture::new(2000).await;
+                        if let Ok(Some(job)) = api::get_upload_status(id.clone()).await {
+                            if job.status == "completed" {
+                                is_completed = true;
+                                break;
+                            } else if job.status == "failed" {
+                                toaster.error(job.error_message.unwrap_or_else(|| i18n.t("err_upload_failed").to_string()));
+                                is_uploading.set(false);
+                                return;
+                            }
+                        }
+                    }
+                    if is_completed {
+                        toaster.success(i18n.t("success_upload_published"));
+                        nav.push(crate::app::Route::WallpaperDetail { id });
+                    } else {
+                        toaster.error("Upload processing timed out");
+                    }
+                    is_uploading.set(false);
                     return;
                 }
                 Ok(resp) => {
@@ -140,8 +159,27 @@ pub fn Upload() -> Element {
             match res {
                 Ok(resp) if resp.status().is_success() => {
                     let id = resp.text().await.unwrap_or_default();
-                    toaster.success(i18n.t("success_upload_published"));
-                    nav.push(crate::app::Route::WallpaperDetail { id });
+                    let mut is_completed = false;
+                    for _ in 0..60 {
+                        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+                        if let Ok(Some(job)) = api::get_upload_status(id.clone()).await {
+                            if job.status == "completed" {
+                                is_completed = true;
+                                break;
+                            } else if job.status == "failed" {
+                                toaster.error(job.error_message.unwrap_or_else(|| i18n.t("err_upload_failed").to_string()));
+                                is_uploading.set(false);
+                                return;
+                            }
+                        }
+                    }
+                    if is_completed {
+                        toaster.success(i18n.t("success_upload_published"));
+                        nav.push(crate::app::Route::WallpaperDetail { id });
+                    } else {
+                        toaster.error("Upload processing timed out");
+                    }
+                    is_uploading.set(false);
                     return;
                 }
                 Ok(resp) => {

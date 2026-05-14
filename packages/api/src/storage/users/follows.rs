@@ -74,8 +74,12 @@ pub async fn get_followers_db(
                 is_banned: r.is_banned,
                 active_playlist_id: r.active_playlist_id,
                 playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
-            },
-            password_hash: r.password_hash,
+                email_notifs: r.email_notifs,
+                push_notifs: r.push_notifs,
+                download_quality: r.download_quality,
+                auto_download_avif: r.auto_download_avif,
+                safe_search: r.safe_search,
+                },            password_hash: r.password_hash,
             token_version: r.token_version,
         })
         .collect();
@@ -111,8 +115,12 @@ pub async fn get_following_db(
                 is_banned: r.is_banned,
                 active_playlist_id: r.active_playlist_id,
                 playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
-            },
-            password_hash: r.password_hash,
+                email_notifs: r.email_notifs,
+                push_notifs: r.push_notifs,
+                download_quality: r.download_quality,
+                auto_download_avif: r.auto_download_avif,
+                safe_search: r.safe_search,
+                },            password_hash: r.password_hash,
             token_version: r.token_version,
         })
         .collect();
@@ -189,8 +197,12 @@ pub async fn get_suggested_users_db(user_id: &str, limit: i64) -> anyhow::Result
                 is_banned: r.is_banned,
                 active_playlist_id: r.active_playlist_id,
                 playlist_interval_secs: r.playlist_interval_secs.unwrap_or(3600),
-            },
-            password_hash: r.password_hash,
+                email_notifs: r.email_notifs,
+                push_notifs: r.push_notifs,
+                download_quality: r.download_quality,
+                auto_download_avif: r.auto_download_avif,
+                safe_search: r.safe_search,
+                },            password_hash: r.password_hash,
             token_version: r.token_version,
         })
         .collect();

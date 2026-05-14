@@ -61,6 +61,8 @@ pub async fn get_user_favorites(
             is_live: r.get("is_live"),
             embedding: None,
             phash: None,
+            description: None,
+            source_url: None,
         }})
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -272,6 +274,8 @@ pub async fn get_user_feed_db(
             is_live: r.get("is_live"),
             embedding: None,
             phash: None,
+            description: None,
+            source_url: None,
         }})
         .collect();
     let arc_results = std::sync::Arc::new(results);
@@ -338,6 +342,8 @@ pub async fn get_user_download_history_db(
             is_live: r.get("is_live"),
             embedding: None,
             phash: None,
+            description: None,
+            source_url: None,
         }})
         .collect();
     let arc_results = std::sync::Arc::new(results);
