@@ -11,7 +11,7 @@ pub mod windows_wallpaper {
     unsafe extern "system" fn enum_windows_proc(
         tophandle: HWND,
         _lparam: LPARAM,
-    ) -> windows::core::BOOL {
+    ) -> windows::core::BOOL { unsafe {
         let p = FindWindowExW(
             Some(tophandle),
             None,
@@ -25,7 +25,7 @@ pub mod windows_wallpaper {
             }
         }
         windows::core::BOOL::from(true)
-    }
+    }}
 
     pub fn attach_to_desktop(hwnd: isize) {
         unsafe {

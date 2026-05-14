@@ -187,7 +187,7 @@ pub fn KeybindsSettings() -> Element {
     let mut config = use_signal(|| AppConfig::load());
     let mut is_recording = use_signal(|| None::<String>);
 
-    let handle_keydown = move |evt: KeyboardEvent, key: String| {
+    let mut handle_keydown = move |evt: KeyboardEvent, key: String| {
         evt.prevent_default();
         if let Some(hotkey) = parse_keyboard_event(&evt) {
             let mut current_config = config();

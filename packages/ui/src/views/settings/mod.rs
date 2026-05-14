@@ -78,7 +78,7 @@ pub(crate) fn use_stored_signal<T: std::str::FromStr + std::fmt::Display + Clone
 #[component]
 pub fn SettingsLayout() -> Element {
     let i18n = crate::i18n::use_i18n();
-    let route = use_route::<Route>();
+    let _route = use_route::<Route>();
 
     rsx! {
         document::Stylesheet { href: SETTINGS_CSS }

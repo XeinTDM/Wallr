@@ -440,7 +440,7 @@ pub fn AccountSettings(
 fn ConnectedAccountsSection() -> Element {
     let mut accounts = use_signal(|| Vec::<api::OAuthAccount>::new());
     let toaster = crate::use_toaster();
-    let i18n = crate::i18n::use_i18n();
+    let _i18n = crate::i18n::use_i18n();
 
     use_effect(move || {
         spawn(async move {

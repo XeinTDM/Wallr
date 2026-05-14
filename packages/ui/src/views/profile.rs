@@ -2,7 +2,6 @@ use crate::app::Route;
 use crate::{LoadingScreen, WallpaperCard, use_toaster};
 use api::{UserCollection, create_user_collection, get_my_collections};
 use dioxus::prelude::*;
-use lucide_dioxus::Key;
 
 #[component]
 pub fn Profile() -> Element {

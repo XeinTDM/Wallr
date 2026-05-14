@@ -14,7 +14,7 @@ const ADMIN_CSS: Asset = asset!("/assets/styling/settings.css"); // Reusing sett
 pub fn AdminLayout() -> Element {
     let auth_state = use_context::<Signal<AuthState>>();
     let nav = use_navigator();
-    let route = use_route::<Route>();
+    let _route = use_route::<Route>();
 
     let is_allowed = match auth_state() {
         AuthState::Authenticated(u) => {

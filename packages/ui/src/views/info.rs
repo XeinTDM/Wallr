@@ -170,7 +170,7 @@ pub fn ContactUs() -> Element {
 pub fn Dmca() -> Element {
     let mut toaster = crate::toast::use_toaster();
     let nav = use_navigator();
-    let i18n = crate::i18n::use_i18n();
+    let _i18n = crate::i18n::use_i18n();
 
     let mut wallpaper_id = use_signal(String::new);
     let mut claimant_name = use_signal(String::new);

@@ -166,7 +166,7 @@ fn App() -> Element {
             let _ = manager.register(hotkey_s);
             let _ = manager.register(hotkey_h);
 
-            let id_w = hotkey_w.id();
+            let _id_w = hotkey_w.id();
             let id_right = hotkey_right.id();
             let id_left = hotkey_left.id();
             let id_s = hotkey_s.id();
@@ -412,7 +412,7 @@ async fn apply_wallpaper(window: dioxus::desktop::DesktopContext, wp: api::Wallp
 
         let dom =
             dioxus::core::VirtualDom::new_with_props(LiveWallpaperView, LiveWallpaperProps { url });
-        let mut wb = WindowBuilder::new()
+        let wb = WindowBuilder::new()
             .with_title("Wallr Live Background")
             .with_decorations(false)
             .with_always_on_bottom(true)

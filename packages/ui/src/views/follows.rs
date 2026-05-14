@@ -1,6 +1,5 @@
 use crate::LoadingScreen;
 use crate::app::Route;
-use api::User;
 use dioxus::prelude::*;
 use lucide_dioxus::{ArrowLeft, Users};
 

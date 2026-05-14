@@ -1,6 +1,5 @@
 use crate::models::*;
 use dioxus::prelude::*;
-use crate::auth::*;
 
 /// Fetch a single wallpaper by its ID.
 #[server]

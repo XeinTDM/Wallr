@@ -1,6 +1,5 @@
 use crate::models::*;
 use dioxus::prelude::*;
-use crate::auth::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
