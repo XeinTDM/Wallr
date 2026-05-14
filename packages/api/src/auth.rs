@@ -418,7 +418,8 @@ pub async fn request_password_reset(email: String) -> Result<(), ServerFnError> 
             .await
             .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
-        let reset_link = format!("http://localhost:8080/reset-password/{}", token);
+        let app_url = std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let reset_link = format!("{}/reset-password/{}", app_url, token);
 
         let smtp_username = std::env::var("SMTP_USERNAME").unwrap_or_default();
         let smtp_password = std::env::var("SMTP_PASSWORD").unwrap_or_default();

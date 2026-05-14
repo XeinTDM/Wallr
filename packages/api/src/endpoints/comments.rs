@@ -58,6 +58,44 @@ pub async fn add_wallpaper_comment(
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
+    if let Ok(Some(wp)) = crate::storage::get_wallpaper_by_id(&comment.wallpaper_id).await {
+        if wp.author_id != user.id {
+            let short_comment = if comment.content.chars().count() > 30 {
+                let mut c = comment.content.chars().take(27).collect::<String>();
+                c.push_str("...");
+                c
+            } else {
+                comment.content.clone()
+            };
+            let _ = crate::storage::create_notification_db(
+                &wp.author_id,
+                "New Comment",
+                &format!("{} commented on '{}': \"{}\"", user.name, wp.title, short_comment),
+            )
+            .await;
+        }
+
+        let mentions: std::collections::HashSet<&str> = comment.content
+            .split_whitespace()
+            .filter(|w| w.starts_with('@') && w.len() > 1)
+            .map(|w| w.trim_start_matches('@').trim_end_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| !w.is_empty())
+            .collect();
+
+        for mention in mentions {
+            if let Ok(Some(mentioned_user)) = crate::storage::get_user_by_name(mention).await {
+                if mentioned_user.user.id != user.id && mentioned_user.user.id != wp.author_id {
+                    let _ = crate::storage::create_notification_db(
+                        &mentioned_user.user.id,
+                        "Mentioned in Comment",
+                        &format!("{} mentioned you in a comment on '{}'", user.name, wp.title),
+                    )
+                    .await;
+                }
+            }
+        }
+    }
+
     Ok(comment)
 }
 

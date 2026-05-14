@@ -259,9 +259,9 @@ async fn oauth_callback(
             .map(|hash| hash.to_string())
             .unwrap_or_default();
 
-        let new_user = crate::User {
+        let mut new_user = crate::User {
             id: Uuid::new_v4().to_string(),
-            name,
+            name: name.clone(),
             email,
             pfp_url,
             banner_url: None,
@@ -276,16 +276,44 @@ async fn oauth_callback(
             download_quality: "Original (4K+)".to_string(),
             auto_download_avif: true,
             safe_search: true,
-            };
+        };
 
-        let record = crate::UserRecord {
+        let mut record = crate::UserRecord {
             user: new_user.clone(),
-            password_hash,
+            password_hash: password_hash.clone(),
             token_version: 1,
         };
 
-        if crate::storage::create_user(&record).await.is_err() {
-            return Redirect::to("/login?error=create_user_failed").into_response();
+        // Try creating the user, fallback to suffixed names if there's a unique constraint collision
+        let mut created = false;
+        let mut attempt = 0;
+        
+        while !created && attempt < 5 {
+            match crate::storage::create_user(&record).await {
+                Ok(_) => {
+                    created = true;
+                }
+                Err(e) => {
+                    // Check if the error is a unique constraint violation on the name column
+                    if e.to_string().contains("unique constraint") || e.to_string().contains("users_name_key") {
+                        attempt += 1;
+                        let suffix = rand::random::<u16>();
+                        new_user.name = format!("{}_{}", name, suffix);
+                        record.user.name = new_user.name.clone();
+                    } else {
+                        return Redirect::to("/login?error=create_user_failed").into_response();
+                    }
+                }
+            }
+        }
+        
+        if !created {
+            // Final fallback: use a UUID as the name
+            new_user.name = format!("user_{}", Uuid::new_v4().to_string().replace("-", "")[..8].to_string());
+            record.user.name = new_user.name.clone();
+            if crate::storage::create_user(&record).await.is_err() {
+                return Redirect::to("/login?error=create_user_failed").into_response();
+            }
         }
 
         crate::storage::link_oauth_account(&new_user.id, &provider, &provider_id)

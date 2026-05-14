@@ -151,6 +151,68 @@ pub async fn update_preferences(
     .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct OAuthAccount {
+    pub provider: String,
+    pub provider_user_id: String,
+}
+
+#[server]
+pub async fn get_linked_oauth_accounts() -> Result<Vec<OAuthAccount>, ServerFnError> {
+    let user = require_auth().await?;
+    let pool = crate::storage::get_pool().map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    let accounts = sqlx::query!(
+        "SELECT provider, provider_user_id FROM user_oauth_accounts WHERE user_id = $1",
+        user.id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(accounts.into_iter().map(|a| OAuthAccount {
+        provider: a.provider,
+        provider_user_id: a.provider_user_id,
+    }).collect())
+}
+
+#[server]
+pub async fn unlink_oauth_account(provider: String) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    let pool = crate::storage::get_pool().map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    // Safety check: ensure user has a password before unlinking their last OAuth account
+    let user_record = crate::storage::get_user_by_id(&user.id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?
+        .ok_or_else(|| ServerFnError::new("api_err_user_not_found"))?;
+        
+    let accounts = sqlx::query!(
+        "SELECT provider FROM user_oauth_accounts WHERE user_id = $1",
+        user.id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    // If they have no password hash AND this is their only OAuth account, block it to prevent account lockout.
+    if user_record.password_hash.is_empty() && accounts.len() <= 1 {
+         return Err(ServerFnError::new("Cannot unlink last login method without setting a password first."));
+    }
+
+    sqlx::query!(
+        "DELETE FROM user_oauth_accounts WHERE user_id = $1 AND provider = $2",
+        user.id,
+        provider
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    Ok(())
+}
+
+
 #[server]
 pub async fn set_active_playlist(
     collection_id: Option<String>,
