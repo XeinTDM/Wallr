@@ -15,7 +15,7 @@ pub fn Home() -> Element {
     let mut tab = use_signal(|| FeedTab::Trending);
 
     let initial_trending_res = use_server_future(move || async move {
-        get_wallpapers(None, 20, api::FilterOptions { safe_search: safe_search_enabled, ..Default::default() })
+        get_wallpapers(None, 20, api::FilterOptions { safe_search: safe_search_enabled, sort: "trending".to_string(), ..Default::default() })
             .await
             .unwrap_or_default()
     })?;
@@ -69,7 +69,7 @@ pub fn Home() -> Element {
             return;
         }
 
-        if let Ok(new_wps) = get_wallpapers(c, 20, api::FilterOptions { safe_search: safe_search_enabled, ..Default::default() }).await {
+        if let Ok(new_wps) = get_wallpapers(c, 20, api::FilterOptions { safe_search: safe_search_enabled, sort: "trending".to_string(), ..Default::default() }).await {
             if new_wps.is_empty() {
                 trending_has_more.set(false);
             } else {
@@ -169,8 +169,9 @@ pub fn Home() -> Element {
                     is_loading: _fetch_more_trending().is_none() && trending_cursor().is_some(),
                     on_end_reached: move |_| {
                         if trending_has_more() && let Some(last) = trending_wallpapers().last() {
+                            let score = last.downloads + (last.likes * 2);
                             trending_cursor
-                                .set(Some(format!("{},{}", last.created_at.to_rfc3339(), last.id)));
+                                .set(Some(format!("{},{}", score, last.id)));
                         }
                     },
                 }

@@ -157,6 +157,14 @@ pub async fn load_all_wallpapers(
                         q.push_bind(id.to_string());
                         q.push(")");
                     }
+                    "trending" => {
+                        let score: i64 = val.parse().unwrap_or(0);
+                        q.push(" AND ((w.downloads + (w.likes * 2)), w.id) < (");
+                        q.push_bind(score);
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
                     _ => {
                         if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
                             q.push(" AND (w.created_at, w.id) < (");
@@ -176,6 +184,9 @@ pub async fn load_all_wallpapers(
             }
             "rating" => {
                 q.push(" ORDER BY w.likes DESC, w.id DESC");
+            }
+            "trending" => {
+                q.push(" ORDER BY (w.downloads + (w.likes * 2)) DESC, w.id DESC");
             }
             _ => {
                 q.push(" ORDER BY w.created_at DESC, w.id DESC");
@@ -236,6 +247,14 @@ pub async fn get_wallpapers_by_tag(
                         q.push_bind(id.to_string());
                         q.push(")");
                     }
+                    "trending" => {
+                        let score: i64 = val.parse().unwrap_or(0);
+                        q.push(" AND ((w.downloads + (w.likes * 2)), w.id) < (");
+                        q.push_bind(score);
+                        q.push(", ");
+                        q.push_bind(id.to_string());
+                        q.push(")");
+                    }
                     _ => {
                         if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
                             q.push(" AND (w.created_at, w.id) < (");
@@ -255,6 +274,9 @@ pub async fn get_wallpapers_by_tag(
             }
             "rating" => {
                 q.push(" ORDER BY w.likes DESC, w.id DESC");
+            }
+            "trending" => {
+                q.push(" ORDER BY (w.downloads + (w.likes * 2)) DESC, w.id DESC");
             }
             _ => {
                 q.push(" ORDER BY w.created_at DESC, w.id DESC");
@@ -340,6 +362,14 @@ pub async fn search_wallpapers_db(
                             q.push_bind(id.to_string());
                             q.push(")");
                         }
+                        "trending" => {
+                            let score: i64 = val.parse().unwrap_or(0);
+                            q.push(" AND ((w.downloads + (w.likes * 2)), w.id) < (");
+                            q.push_bind(score);
+                            q.push(", ");
+                            q.push_bind(id.to_string());
+                            q.push(")");
+                        }
                         _ => {
                             if let Ok(date) = chrono::DateTime::parse_from_rfc3339(val) {
                                 q.push(" AND (w.created_at, w.id) < (");
@@ -371,6 +401,13 @@ pub async fn search_wallpapers_db(
                     q.push_bind(&query_cloned);
                     q.push(")) DESC, w.id DESC");
                 }
+                "trending" => {
+                    q.push(
+                        " ORDER BY (w.downloads + (w.likes * 2)) DESC, ts_rank(w.search_vector, websearch_to_tsquery('english', ",
+                    );
+                    q.push_bind(&query_cloned);
+                    q.push(")) DESC, w.id DESC");
+                }
                 "date" => {
                     q.push(" ORDER BY w.created_at DESC, w.id DESC");
                 }
@@ -387,6 +424,9 @@ pub async fn search_wallpapers_db(
                 }
                 "rating" => {
                     q.push(" ORDER BY w.likes DESC, w.id DESC");
+                }
+                "trending" => {
+                    q.push(" ORDER BY (w.downloads + (w.likes * 2)) DESC, w.id DESC");
                 }
                 _ => {
                     q.push(" ORDER BY w.created_at DESC, w.id DESC");
