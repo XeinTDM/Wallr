@@ -13,6 +13,16 @@ pub fn Search(query: Option<String>) -> Element {
     let color = use_signal(String::new);
     let ai_filter = use_signal(String::new);
     let timeframe = use_signal(String::new);
+    
+    let license = use_signal(String::new);
+    let source = use_signal(String::new);
+    let orientation = use_signal(String::new);
+    let curated = use_signal(|| false);
+    let tags = use_signal(String::new);
+    let excluded_tags = use_signal(String::new);
+    let min_width = use_signal(String::new);
+    let min_height = use_signal(String::new);
+    let author = use_signal(String::new);
 
     let query_for_initial = query.clone();
     let initial_res = use_server_future(move || {
@@ -38,6 +48,15 @@ pub fn Search(query: Option<String>) -> Element {
             ai_filter: ai_filter(),
             timeframe: timeframe(),
             safe_search: safe_search_enabled,
+            license: license(),
+            source: source(),
+            orientation: orientation(),
+            curated: curated(),
+            tags: tags().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            excluded_tags: excluded_tags().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            min_width: min_width().parse().ok(),
+            min_height: min_height().parse().ok(),
+            author: author(),
             ..Default::default()
         };
         async move {
@@ -75,6 +94,15 @@ pub fn Search(query: Option<String>) -> Element {
         let _ = color();
         let _ = ai_filter();
         let _ = timeframe();
+        let _ = license();
+        let _ = source();
+        let _ = orientation();
+        let _ = curated();
+        let _ = tags();
+        let _ = excluded_tags();
+        let _ = min_width();
+        let _ = min_height();
+        let _ = author();
         
         if is_first_mount() {
             is_first_mount.set(false);
@@ -103,6 +131,15 @@ pub fn Search(query: Option<String>) -> Element {
             color,
             ai_filter,
             timeframe,
+            license,
+            source,
+            orientation,
+            curated,
+            tags,
+            excluded_tags,
+            min_width,
+            min_height,
+            author,
             WallpaperGrid {
                 wallpapers: all_wallpapers,
                 is_loading: _fetch().is_none() && (cursor().is_some() || all_wallpapers().is_empty()),

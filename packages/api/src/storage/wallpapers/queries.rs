@@ -92,8 +92,27 @@ fn apply_filters(q: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, filters: &crate
         q.push_bind(format!("%{}%", filters.source));
     }
     if !filters.license.is_empty() {
+        q.push(" AND w.license = ");
+        q.push_bind(filters.license.clone());
+    }
+    if !filters.tags.is_empty() {
         q.push(" AND w.tags @> ");
-        q.push_bind(serde_json::json!(vec![format!("license:{}", filters.license)]));
+        q.push_bind(serde_json::json!(filters.tags));
+    }
+    if !filters.excluded_tags.is_empty() {
+        for tag in &filters.excluded_tags {
+            q.push(" AND NOT (w.tags @> ");
+            q.push_bind(serde_json::json!(vec![tag]));
+            q.push(")");
+        }
+    }
+    if let Some(w) = filters.min_width {
+        q.push(" AND w.width >= ");
+        q.push_bind(w as i64);
+    }
+    if let Some(h) = filters.min_height {
+        q.push(" AND w.height >= ");
+        q.push_bind(h as i64);
     }
     if filters.curated {
         q.push(" AND EXISTS (SELECT 1 FROM editorial_collection_items eci JOIN editorial_collections ec ON eci.collection_id = ec.id WHERE eci.wallpaper_id = w.id AND ec.is_published = true)");
@@ -487,6 +506,7 @@ pub async fn get_similar_wallpapers_db(
                     phash: None,
                     description: None,
                     source_url: None,
+                    license: "standard".to_string(),
                 });
             }
         }
@@ -514,6 +534,7 @@ pub async fn get_similar_wallpapers_db(
                     phash: None,
                     description: None,
                     source_url: None,
+                    license: "standard".to_string(),
                 });
             }
         }

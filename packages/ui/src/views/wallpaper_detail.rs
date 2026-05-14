@@ -868,7 +868,7 @@ fn CommentsSection(wallpaper_id: String, is_wallpaper_author: bool) -> Element {
                                         let mut p = page;
                                         let mut text_sig = new_comment;
                                         spawn(async move {
-                                            match api::add_wallpaper_comment(wid, text).await {
+                                            match api::add_wallpaper_comment(wid, text, None).await {
                                                 Ok(_) => {
                                                     text_sig.set(String::new());
                                                     p.set(0);

@@ -16,6 +16,7 @@ pub async fn get_wallpaper_comments(
 pub async fn add_wallpaper_comment(
     wallpaper_id: String,
     content: String,
+    parent_id: Option<String>,
 ) -> Result<WallpaperComment, ServerFnError> {
     let user = require_auth().await?;
     let content = content.trim();
@@ -51,6 +52,10 @@ pub async fn add_wallpaper_comment(
         user_pfp: user.pfp_url.clone(),
         content: content.to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
+        parent_id,
+        is_pinned: false,
+        is_hidden: false,
+        is_edited: false,
     };
 
     crate::storage::add_comment_db(&comment)
@@ -124,4 +129,42 @@ pub async fn delete_comment(comment_id: String) -> Result<(), ServerFnError> {
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
 
+#[server]
+pub async fn pin_wallpaper_comment(comment_id: String, pin: bool) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::pin_comment_db(&comment_id, &user.id, pin)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
 
+#[server]
+pub async fn hide_wallpaper_comment(comment_id: String, hide: bool) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::hide_comment_db(&comment_id, &user.id, hide)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn toggle_wallpaper_comments(wallpaper_id: String, disable: bool) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::toggle_wallpaper_comments_db(&wallpaper_id, &user.id, disable)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn report_wallpaper_comment(comment_id: String, reason: String) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::report_comment_db(&comment_id, &user.id, &user.name, &reason)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_comment_edit_history(comment_id: String) -> Result<Vec<crate::models::CommentEditHistory>, ServerFnError> {
+    // Anyone can view edit history of public comments
+    crate::storage::get_comment_edit_history_db(&comment_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}

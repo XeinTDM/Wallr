@@ -304,6 +304,25 @@ pub async fn resolve_moderation_appeal(
             "Moderation Appeal Update",
             &format!("Your appeal regarding {} has been marked as: {}", appeal.target_id, status),
         ).await;
+
+        if status == "approved" {
+            let target_type = appeal.target_type.to_uppercase();
+            match target_type.as_str() {
+                "USER" => {
+                    let _ = crate::storage::admin_ban_user_db(&appeal.target_id, false).await;
+                }
+                "WALLPAPER" => {
+                    let _ = crate::storage::restore_wallpaper_db(&appeal.target_id).await;
+                }
+                "HASH" => {
+                    let _ = crate::storage::remove_banned_hash_db(&appeal.target_id).await;
+                }
+                "QUARANTINE" => {
+                    let _ = crate::storage::republish_quarantined_upload_db(&appeal.target_id).await;
+                }
+                _ => {}
+            }
+        }
     }
 
     Ok(())

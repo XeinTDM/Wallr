@@ -17,6 +17,8 @@ pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
     let phash: Option<Vec<u8>> = row.try_get("phash").unwrap_or(None);
     let description: Option<String> = row.try_get("description").unwrap_or(None);
     let source_url: Option<String> = row.try_get("source_url").unwrap_or(None);
+    let license: String = row.try_get("license").unwrap_or_else(|_| "standard".to_string());
+    let moderation_status: String = row.try_get("moderation_status").unwrap_or_else(|_| "active".to_string());
 
     Wallpaper {
         id: row.get("id"),
@@ -38,6 +40,8 @@ pub(crate) fn map_wallpaper_row(row: sqlx::postgres::PgRow) -> Wallpaper {
         phash,
         description,
         source_url,
+        license,
+        moderation_status,
     }
 }
 

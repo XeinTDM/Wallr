@@ -113,3 +113,35 @@ pub async fn get_appeal_by_id_db(id: &str) -> anyhow::Result<Option<ModerationAp
         resolved_at: r.resolved_at,
     }))
 }
+
+pub async fn restore_wallpaper_db(id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!(
+        "UPDATE wallpapers SET moderation_status = 'active', is_private = false WHERE id = $1",
+        id
+    )
+    .execute(pool)
+    .await?;
+    crate::storage::cache::get_wallpaper_cache().remove(id).await;
+    crate::storage::cache::get_wallpaper_list_cache().invalidate_all();
+    Ok(())
+}
+
+pub async fn remove_banned_hash_db(id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!("DELETE FROM banned_hashes WHERE id = $1 OR encode(phash, 'hex') = $1", id)
+        .execute(pool)
+        .await?;
+    sqlx::query!("DELETE FROM banned_exact_hashes WHERE id = $1 OR sha256 = $1", id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn republish_quarantined_upload_db(id: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!("DELETE FROM quarantined_uploads WHERE id = $1", id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

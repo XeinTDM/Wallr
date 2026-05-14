@@ -22,6 +22,7 @@ pub struct Wallpaper {
     pub phash: Option<Vec<u8>>,
     pub description: Option<String>,
     pub source_url: Option<String>,
+    pub license: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -38,6 +39,20 @@ pub struct FilterOptions {
     pub license: String,
     pub orientation: String,
     pub curated: bool,
+    pub tags: Vec<String>,
+    pub excluded_tags: Vec<String>,
+    pub min_width: Option<u32>,
+    pub min_height: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SavedSearch {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub query: Option<String>,
+    pub filters: FilterOptions,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -162,6 +177,30 @@ pub struct WallpaperComment {
     pub user_pfp: String,
     pub content: String,
     pub created_at: String,
+    pub parent_id: Option<String>,
+    pub is_pinned: bool,
+    pub is_hidden: bool,
+    pub is_edited: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CommentEditHistory {
+    pub id: String,
+    pub comment_id: String,
+    pub previous_content: String,
+    pub edited_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReportedComment {
+    pub id: String,
+    pub comment_id: String,
+    pub reporter_id: String,
+    pub reporter_name: String,
+    pub reason: String,
+    pub status: String,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
