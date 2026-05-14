@@ -196,7 +196,7 @@ pub fn Dmca() -> Element {
         let sig = digital_signature();
 
         spawn(async move {
-            if let Ok(_) = api::submit_dmca_claim(id, name, email, url_opt, desc, sig).await {
+            if let Ok(_) = api::submit_dmca_claim(id, name, email, url_opt, desc, sig, None).await {
                 toaster.success("DMCA claim submitted successfully.");
                 nav.push(crate::app::Route::Home {});
             } else {

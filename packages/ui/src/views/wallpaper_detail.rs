@@ -327,8 +327,33 @@ pub fn WallpaperDetail(id: String) -> Element {
                                                     if is_download_menu_open() {
                                                         div { style: "position: absolute; top: 70px; left: 0; right: 0; background: var(--bg-secondary); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);",
                                                             div { style: "display: flex; flex-direction: column; gap: 8px;",
+                                                                {
+                                                                    let (pref_quality, pref_format) = if let crate::app::AuthState::Authenticated(ref u) = auth_state() {
+                                                                        (u.download_quality.clone(), if u.auto_download_avif { "AVIF" } else { "JPG" })
+                                                                    } else {
+                                                                        (i18n.t("wp_original_size").to_string(), "AVIF")
+                                                                    };
+                                                                    rsx! {
+                                                                        a {
+                                                                            href: "/wallpaper/{wp.id}/download",
+                                                                            download: "{wp.title}",
+                                                                            target: "_blank",
+                                                                            style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",
+                                                                            class: "menu-item-hover",
+                                                                            onclick: {
+                                                                                let mut toaster = toaster;
+                                                                                move |_| {
+                                                                                    is_download_menu_open.set(false);
+                                                                                    toaster.success(i18n.t("success_download_started"));
+                                                                                }
+                                                                            },
+                                                                            span { "{pref_quality} (Default)" }
+                                                                            span { style: "color: var(--text-muted); font-size: 12px;", "{pref_format}" }
+                                                                        }
+                                                                    }
+                                                                }
                                                                 a {
-                                                                    href: "/wallpaper/{wp.id}/download",
+                                                                    href: "/wallpaper/{wp.id}/download?width=3840&format=avif",
                                                                     download: "{wp.title}",
                                                                     target: "_blank",
                                                                     style: "background: none; border: none; color: white; text-align: left; padding: 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: flex; justify-content: space-between;",

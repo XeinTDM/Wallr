@@ -61,8 +61,9 @@ fn PopularSection(
             aspect_ratio: aspect_ratio(),
             color: color(),
             ai_filter: ai_filter(),
-            timeframe: period_clone,
+            timeframe: period_clone.clone(),
             safe_search: true,
+            ..Default::default()
         };
         async move {
             if current_cat == "all" {
@@ -150,6 +151,7 @@ pub fn PopularGrid(period: String) -> Element {
             ai_filter: ai_filter(),
             timeframe: timeframe(),
             safe_search: true,
+            ..Default::default()
         };
 
         let period_val = _period_clone.clone();

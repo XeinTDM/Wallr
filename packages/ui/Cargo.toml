@@ -16,6 +16,10 @@ open = { version = "5.3.4", optional = true }
 rfd = { version = "0.17.2", optional = true }
 auto-launch = { version = "0.6.0", optional = true }
 dioxus-router = "0.7.9"
+global-hotkey = "0.8.0"
+serde = { version = "1.0.228", features = ["derive"] }
+dioxus-signals = "0.7.9"
+serde_json = "1.0.149"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { version = "0.4.0", features = ["futures"] }

@@ -29,9 +29,10 @@ pub fn AiGenerated() -> Element {
             sort: sort(),
             aspect_ratio: aspect_ratio(),
             color: color(),
-            ai_filter: ai_filter(),
+            ai_filter: "ai_only".to_string(),
             timeframe: timeframe(),
             safe_search: true,
+            ..Default::default()
         };
         async move {
             let c = cursor();

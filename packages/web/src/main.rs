@@ -47,18 +47,24 @@ fn main() {
             }
 
             let mut is_private = false;
+            let mut current_user = None;
+
+            if let Some(token_str) = extract_session_token(&headers) {
+                if let Ok(user) = api::storage::verify_token(&token_str).await {
+                    current_user = Some(user);
+                }
+            }
+
             if let Ok(Some(wp)) = api::storage::get_wallpaper_by_id(&id).await {
                 is_private = wp.is_private;
                 if wp.is_private {
                     let mut authorized = false;
-                    if let Some(token_str) = extract_session_token(&headers) {
-                        if let Ok(user) = api::storage::verify_token(&token_str).await {
-                            if user.id == wp.author_id
-                                || user.role == "admin"
-                                || user.role == "super_admin"
-                            {
-                                authorized = true;
-                            }
+                    if let Some(user) = &current_user {
+                        if user.id == wp.author_id
+                            || user.role == "admin"
+                            || user.role == "super_admin"
+                        {
+                            authorized = true;
                         }
                     }
                     if !authorized {
@@ -70,16 +76,33 @@ fn main() {
                 return (StatusCode::NOT_FOUND, "Wallpaper not found").into_response();
             }
 
+            let pref_format = if let Some(user) = &current_user {
+                if user.auto_download_avif { "avif" } else { "jpg" }
+            } else {
+                "avif"
+            };
+
             let mut format = query
                 .format
-                .unwrap_or_else(|| "avif".to_string())
+                .unwrap_or_else(|| pref_format.to_string())
                 .to_lowercase();
             if format == "jpeg" {
                 format = "jpg".to_string();
             }
+
             let mut width = query.width;
             let mut height = query.height;
             let crop_val = query.crop.as_deref().unwrap_or("center").to_lowercase();
+
+            if width.is_none() && height.is_none() {
+                if let Some(user) = &current_user {
+                    match user.download_quality.as_str() {
+                        "High (1440p)" => height = Some(1440),
+                        "Standard (1080p)" => height = Some(1080),
+                        _ => {}
+                    }
+                }
+            }
 
             if let Some(w) = width {
                 if w > 7680 {
@@ -125,8 +148,6 @@ fn main() {
                 }
             });
 
-            let public_url = std::env::var("R2_PUBLIC_URL")
-                .unwrap_or_else(|_| "https://cdn.example.com".to_string());
             let is_native_format = format == "avif" || format == "jpg" || format == "png";
 
             let content_type = match format.as_str() {
@@ -137,27 +158,24 @@ fn main() {
             };
 
             if width.is_none() && height.is_none() && is_native_format {
-                let target_url = format!("{}/{}_master.{}", public_url, id, format);
                 if is_private {
-                    if let Ok(resp) = reqwest::get(&target_url).await {
-                        if resp.status().is_success() {
-                            if let Ok(bytes) = resp.bytes().await {
-                                return (
-                                    axum::http::StatusCode::OK,
-                                    [(axum::http::header::CONTENT_TYPE, content_type)],
-                                    bytes,
-                                )
-                                    .into_response();
-                            }
-                        }
+                    if let Ok(bytes) = api::storage::get_image_bytes(&id, "master", &format).await {
+                        return (
+                            axum::http::StatusCode::OK,
+                            [(axum::http::header::CONTENT_TYPE, content_type)],
+                            bytes,
+                        )
+                            .into_response();
                     }
                     return (
                         StatusCode::NOT_FOUND,
-                        "Private source image not found on CDN",
+                        "Private source image not found",
                     )
                         .into_response();
                 } else {
-                    return Redirect::temporary(&target_url).into_response();
+                    if let Ok(url) = api::storage::get_image_url(&id, "master", &format, false).await {
+                        return Redirect::temporary(&url).into_response();
+                    }
                 }
             }
 
@@ -167,21 +185,20 @@ fn main() {
                 height.unwrap_or(0),
                 crop_val
             );
-            let variant_url = format!("{}/{}_{}.{}", public_url, id, variant_suffix, format);
 
-            if let Ok(resp) = reqwest::get(&variant_url).await {
-                if resp.status().is_success() {
-                    if is_private {
-                        if let Ok(bytes) = resp.bytes().await {
-                            return (
-                                axum::http::StatusCode::OK,
-                                [(axum::http::header::CONTENT_TYPE, content_type)],
-                                bytes,
-                            )
-                                .into_response();
-                        }
-                    } else {
-                        return Redirect::temporary(&variant_url).into_response();
+            if let Ok(true) = api::storage::image_exists(&id, &variant_suffix, &format).await {
+                if is_private {
+                    if let Ok(bytes) = api::storage::get_image_bytes(&id, &variant_suffix, &format).await {
+                        return (
+                            axum::http::StatusCode::OK,
+                            [(axum::http::header::CONTENT_TYPE, content_type)],
+                            bytes,
+                        )
+                            .into_response();
+                    }
+                } else {
+                    if let Ok(url) = api::storage::get_image_url(&id, &variant_suffix, &format, false).await {
+                        return Redirect::temporary(&url).into_response();
                     }
                 }
             }
@@ -195,21 +212,14 @@ fn main() {
                 }
             };
 
-            let master_url_avif = format!("{}/{}_master.avif", public_url, id);
-            let master_url_jpg = format!("{}/{}_master.jpg", public_url, id);
-
-            let data = match reqwest::get(&master_url_avif).await {
-                Ok(resp) if resp.status().is_success() => {
-                    resp.bytes().await.unwrap_or_default().to_vec()
-                }
-                _ => match reqwest::get(&master_url_jpg).await {
-                    Ok(resp) if resp.status().is_success() => {
-                        resp.bytes().await.unwrap_or_default().to_vec()
-                    }
-                    _ => {
+            let data = match api::storage::get_image_bytes(&id, "master", "avif").await {
+                Ok(bytes) => bytes,
+                Err(_) => match api::storage::get_image_bytes(&id, "master", "jpg").await {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
                         return (
                             StatusCode::NOT_FOUND,
-                            "Source image not found on CDN".to_string(),
+                            "Source image not found".to_string(),
                         )
                             .into_response();
                     }
@@ -589,6 +599,8 @@ fn main() {
                     "/assets/uploads",
                     tower_http::services::ServeDir::new("packages/ui/assets/uploads"),
                 )
+                .route("/sitemap.xml", get(sitemap_handler))
+                .route("/robots.txt", get(robots_handler))
                 .route(
                     "/api/upload_raw",
                     post(upload_raw_handler).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),

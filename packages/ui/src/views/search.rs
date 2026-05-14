@@ -36,6 +36,7 @@ pub fn Search(query: Option<String>) -> Element {
             ai_filter: ai_filter(),
             timeframe: timeframe(),
             safe_search: true,
+            ..Default::default()
         };
         async move {
             let c = cursor();

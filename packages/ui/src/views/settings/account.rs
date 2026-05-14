@@ -295,6 +295,8 @@ pub fn AccountSettings(
                 "{i18n.t(\"acc_security_settings\")}"
             }
 
+            ConnectedAccountsSection {}
+
             form {
                 class: "setting-group",
                 style: "flex-direction: column; align-items: flex-start; gap: 12px;",
@@ -433,3 +435,106 @@ pub fn AccountSettings(
         }
     }
 }
+
+#[component]
+fn ConnectedAccountsSection() -> Element {
+    let mut accounts = use_signal(|| Vec::<api::OAuthAccount>::new());
+    let toaster = crate::use_toaster();
+    let i18n = crate::i18n::use_i18n();
+
+    use_effect(move || {
+        spawn(async move {
+            if let Ok(accs) = api::get_linked_oauth_accounts().await {
+                accounts.set(accs);
+            }
+        });
+    });
+
+    rsx! {
+        div { class: "setting-group", style: "flex-direction: column; align-items: flex-start; gap: 16px;",
+            div { class: "setting-info",
+                h3 { "Connected Accounts" }
+                p { "Manage your linked OAuth providers. You can link multiple accounts to sign in." }
+            }
+            
+            div { style: "display: flex; flex-direction: column; gap: 12px; width: 100%;",
+                for account in accounts() {
+                    div {
+                        key: "{account.provider}",
+                        class: "glass",
+                        style: "display: flex; align-items: center; justify-content: space-between; padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);",
+                        div { style: "display: flex; align-items: center; gap: 12px;",
+                            div {
+                                style: "width: 40px; height: 40px; border-radius: 8px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;",
+                                match account.provider.as_str() {
+                                    "github" => rsx! { lucide_dioxus::GitBranch { size: 20 } },
+                                    "discord" => rsx! { lucide_dioxus::MessageSquare { size: 20 } },
+                                    _ => rsx! { lucide_dioxus::Link { size: 20 } },
+                                }
+                            }
+                            div {
+                                div { style: "font-weight: 700; text-transform: capitalize;", "{account.provider}" }
+                                div { style: "font-size: 13px; color: var(--text-muted);", "ID: {account.provider_user_id}" }
+                            }
+                        }
+                        
+                        button {
+                            class: "btn-danger",
+                            style: "padding: 8px 16px; font-size: 14px;",
+                            onclick: move |_| {
+                                let mut toaster = toaster;
+                                let provider = account.provider.clone();
+                                spawn(async move {
+                                    match api::unlink_oauth_account(provider.clone()).await {
+                                        Ok(_) => {
+                                            toaster.success(&format!("Successfully unlinked {} account", provider));
+                                            if let Ok(accs) = api::get_linked_oauth_accounts().await {
+                                                accounts.set(accs);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            toaster.error(&e.to_string());
+                                        }
+                                    }
+                                });
+                            },
+                            "Unlink"
+                        }
+                    }
+                }
+                
+                div {
+                    style: "display: flex; gap: 12px; margin-top: 8px;",
+                    if !accounts().iter().any(|a| a.provider == "google") {
+                        a {
+                            href: "/api/oauth/google/login",
+                            class: "btn-secondary glow-hover",
+                            style: "display: flex; align-items: center; gap: 8px; text-decoration: none;",
+                            lucide_dioxus::Mail { size: 16 }
+                            "Link Google"
+                        }
+                    }
+                    if !accounts().iter().any(|a| a.provider == "github") {
+                        a {
+                            href: "/api/oauth/github/login",
+                            class: "btn-secondary glow-hover",
+                            style: "display: flex; align-items: center; gap: 8px; text-decoration: none;",
+                            lucide_dioxus::GitBranch { size: 16 }
+                            "Link GitHub"
+                        }
+                    }
+                    if !accounts().iter().any(|a| a.provider == "discord") {
+                        a {
+                            href: "/api/oauth/discord/login",
+                            class: "btn-secondary glow-hover",
+                            style: "display: flex; align-items: center; gap: 8px; text-decoration: none;",
+                            lucide_dioxus::MessageSquare { size: 16 }
+                            "Link Discord"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
