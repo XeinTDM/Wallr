@@ -80,6 +80,8 @@ pub enum Route {
         ContactUs {},
         #[route("/dmca")]
         Dmca {},
+        #[route("/appeal/:target_type/:target_id")]
+        Appeal { target_type: String, target_id: String },
         #[route("/user/:username")]
         PublicProfile { username: String },
         #[route("/user/:username/followers")]
@@ -93,6 +95,8 @@ pub enum Route {
             AdminUsers {},
             #[route("/admin/reports")]
             AdminReports {},
+            #[route("/admin/appeals")]
+            AdminAppeals {},
             #[route("/admin/dmca")]
             AdminDmca {},
         #[end_layout]

@@ -2,10 +2,11 @@ pub mod dashboard;
 pub mod dmca;
 pub mod reports;
 pub mod users;
+pub mod appeals;
 
 use crate::app::{AuthState, Route};
 use dioxus::prelude::*;
-use lucide_dioxus::{Activity, ShieldAlert, Flag, Users};
+use lucide_dioxus::{Activity, ShieldAlert, Flag, Users, Scale};
 
 const ADMIN_CSS: Asset = asset!("/assets/styling/settings.css"); // Reusing settings CSS for identical sidebar layout
 
@@ -62,6 +63,13 @@ pub fn AdminLayout() -> Element {
                     active_class: "active",
                     Flag { size: 18 }
                     "Reports"
+                }
+                Link {
+                    to: Route::AdminAppeals {},
+                    class: "settings-nav-item",
+                    active_class: "active",
+                    Scale { size: 18 }
+                    "Appeals"
                 }
                 Link {
                     to: Route::AdminDmca {},

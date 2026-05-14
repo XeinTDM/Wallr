@@ -65,6 +65,7 @@ pub use admin::{
     dashboard::AdminDashboard,
     dmca::AdminDmca,
     reports::AdminReports,
+    appeals::AdminAppeals,
     users::AdminUsers,
 };
 
@@ -76,6 +77,9 @@ pub use reset_password::*;
 
 mod follows;
 pub use follows::{UserFollowers, UserFollowing};
+
+mod appeal;
+pub use appeal::Appeal;
 
 mod not_found;
 pub use not_found::NotFound;

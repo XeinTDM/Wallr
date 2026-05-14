@@ -134,11 +134,33 @@ pub async fn admin_ban_wallpaper_and_hash(
         crate::storage::add_banned_hash(&phash, &admin.id, &reason)
             .await
             .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+            
+        crate::storage::log_audit_action_db(
+            &admin.id,
+            &admin.name,
+            "BAN_HASH",
+            &phash,
+            "HASH",
+            Some(&reason),
+        )
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
     }
 
     crate::storage::delete_wallpaper(&wallpaper_id)
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    crate::storage::log_audit_action_db(
+        &admin.id,
+        &admin.name,
+        "DELETE",
+        &wallpaper_id,
+        "WALLPAPER",
+        Some(&reason),
+    )
+    .await
+    .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
 
     Ok(())
 }
@@ -154,9 +176,9 @@ pub async fn get_reported_wallpapers(
 }
 
 #[server]
-pub async fn resolve_report(report_id: String, action: String) -> Result<(), ServerFnError> {
+pub async fn resolve_report(report_id: String, action: String, notes: Option<String>) -> Result<(), ServerFnError> {
     let admin = require_moderator().await?;
-    crate::storage::resolve_report_db(&report_id, &action, &admin.id, &admin.name)
+    crate::storage::resolve_report_db(&report_id, &action, &admin.id, &admin.name, notes.as_deref())
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
@@ -208,6 +230,7 @@ pub async fn submit_dmca_claim(
     original_url: Option<String>,
     description: String,
     digital_signature: String,
+    evidence_url: Option<String>,
 ) -> Result<(), ServerFnError> {
     crate::storage::submit_dmca_claim_db(
         &wallpaper_id,
@@ -216,6 +239,7 @@ pub async fn submit_dmca_claim(
         original_url.as_deref(),
         &description,
         &digital_signature,
+        evidence_url.as_deref(),
     )
     .await
     .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
@@ -230,9 +254,91 @@ pub async fn get_dmca_claims(status: Option<String>) -> Result<Vec<DmcaClaim>, S
 }
 
 #[server]
-pub async fn resolve_dmca_claim(claim_id: String, action: String) -> Result<(), ServerFnError> {
+pub async fn resolve_dmca_claim(claim_id: String, action: String, notes: Option<String>) -> Result<(), ServerFnError> {
     let admin = require_moderator().await?;
-    crate::storage::resolve_dmca_claim_db(&claim_id, &action, &admin.id, &admin.name)
+    crate::storage::resolve_dmca_claim_db(&claim_id, &action, &admin.id, &admin.name, notes.as_deref())
         .await
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
+
+#[server]
+pub async fn submit_moderation_appeal(
+    target_id: String,
+    target_type: String,
+    reason: String,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::create_appeal_db(&target_id, &target_type, &user.id, &reason)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_moderation_appeals(
+    status: Option<String>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<ModerationAppeal>, ServerFnError> {
+    let _admin = require_moderator().await?;
+    crate::storage::get_appeals_db(status.as_deref(), limit, offset)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn resolve_moderation_appeal(
+    appeal_id: String,
+    status: String,
+    notes: Option<String>,
+) -> Result<(), ServerFnError> {
+    let admin = require_moderator().await?;
+    
+    // Process the appeal
+    crate::storage::resolve_appeal_db(&appeal_id, &admin.id, &status, notes.as_deref())
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+        
+    // Transparently notify the user
+    if let Ok(Some(appeal)) = crate::storage::get_appeal_by_id_db(&appeal_id).await {
+        let _ = crate::storage::create_notification_db(
+            &appeal.user_id,
+            "Moderation Appeal Update",
+            &format!("Your appeal regarding {} has been marked as: {}", appeal.target_id, status),
+        ).await;
+    }
+
+    Ok(())
+}
+
+#[server]
+pub async fn submit_dmca_counter_notice(
+    claim_id: String,
+    content: String,
+) -> Result<(), ServerFnError> {
+    let user = require_auth().await?;
+    crate::storage::submit_dmca_counter_notice_db(&claim_id, &user.id, &content)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn get_dmca_counter_notices(claim_id: String) -> Result<Vec<crate::models::DmcaCounterNotice>, ServerFnError> {
+    let _admin = require_moderator().await?;
+    crate::storage::get_dmca_counter_notices_db(&claim_id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+#[server]
+pub async fn mark_dmca_claim_as_duplicate(
+    claim_id: String,
+    duplicate_of_id: String,
+    notes: Option<String>,
+) -> Result<(), ServerFnError> {
+    let admin = require_moderator().await?;
+    crate::storage::mark_dmca_claim_as_duplicate_db(&claim_id, &duplicate_of_id, &admin.id, &admin.name, notes.as_deref())
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
+}
+
+

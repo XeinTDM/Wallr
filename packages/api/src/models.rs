@@ -17,6 +17,7 @@ pub struct Wallpaper {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub is_private: bool,
     pub is_live: bool,
+    pub moderation_status: String,
     pub embedding: Option<Vec<f32>>,
     pub phash: Option<Vec<u8>>,
     pub description: Option<String>,
@@ -32,6 +33,11 @@ pub struct FilterOptions {
     pub ai_filter: String,
     pub timeframe: String,
     pub safe_search: bool,
+    pub author: String,
+    pub source: String,
+    pub license: String,
+    pub orientation: String,
+    pub curated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -164,6 +170,7 @@ pub struct ReportedWallpaper {
     pub reporter_name: String,
     pub reason: String,
     pub status: String,
+    pub notes: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub wallpaper_thumbnail: Option<String>,
 }
@@ -185,6 +192,19 @@ pub struct DmcaClaim {
     pub description: String,
     pub digital_signature: String,
     pub status: String,
+    pub notes: Option<String>,
+    pub evidence_url: Option<String>,
+    pub duplicate_of_id: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DmcaCounterNotice {
+    pub id: String,
+    pub claim_id: String,
+    pub user_id: String,
+    pub content: String,
+    pub status: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -197,3 +217,18 @@ pub struct UploadJob {
     pub error_message: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ModerationAppeal {
+    pub id: String,
+    pub target_id: String,
+    pub target_type: String,
+    pub user_id: String,
+    pub reason: String,
+    pub status: String,
+    pub reviewer_id: Option<String>,
+    pub review_notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+

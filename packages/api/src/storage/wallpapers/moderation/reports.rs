@@ -1,5 +1,6 @@
 use crate::storage::get_pool;
 use crate::storage::wallpapers::core::delete_wallpaper;
+use crate::storage::create_notification_db;
 
 pub async fn report_wallpaper_db(
     wallpaper_id: &str,
@@ -27,7 +28,7 @@ pub async fn get_reported_wallpapers_db(
     if let Some(s) = status {
         let rows = sqlx::query!(
             r#"
-            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.created_at,
+            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.notes, r.created_at,
                    u.name as reporter_name, w.thumbnail_url as wallpaper_thumbnail
             FROM reported_wallpapers r
             JOIN users u ON r.reporter_id = u.id
@@ -48,14 +49,15 @@ pub async fn get_reported_wallpapers_db(
                 reporter_name: r.reporter_name,
                 reason: r.reason,
                 status: r.status,
+                notes: r.notes,
                 created_at: r.created_at,
-                wallpaper_thumbnail: Some(r.wallpaper_thumbnail),
+                wallpaper_thumbnail: r.wallpaper_thumbnail,
             });
         }
     } else {
         let rows = sqlx::query!(
             r#"
-            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.created_at,
+            SELECT r.id, r.wallpaper_id, r.reporter_id, r.reason, r.status, r.notes, r.created_at,
                    u.name as reporter_name, w.thumbnail_url as wallpaper_thumbnail
             FROM reported_wallpapers r
             JOIN users u ON r.reporter_id = u.id
@@ -74,8 +76,9 @@ pub async fn get_reported_wallpapers_db(
                 reporter_name: r.reporter_name,
                 reason: r.reason,
                 status: r.status,
+                notes: r.notes,
                 created_at: r.created_at,
-                wallpaper_thumbnail: Some(r.wallpaper_thumbnail),
+                wallpaper_thumbnail: r.wallpaper_thumbnail,
             });
         }
     }
@@ -88,6 +91,7 @@ pub async fn resolve_report_db(
     action: &str,
     admin_id: &str,
     admin_name: &str,
+    notes: Option<&str>,
 ) -> anyhow::Result<()> {
     let pool = get_pool()?;
 
@@ -103,11 +107,15 @@ pub async fn resolve_report_db(
         None => return Err(anyhow::anyhow!("Report not found")),
     };
 
+    let wp = sqlx::query!("SELECT author_id, title FROM wallpapers WHERE id = $1", wallpaper_id)
+        .fetch_optional(pool)
+        .await?;
+
     if action == "delete_wallpaper" {
         delete_wallpaper(&wallpaper_id).await?;
         sqlx::query!(
-            "UPDATE reported_wallpapers SET status = 'resolved_deleted' WHERE id = $1",
-            report_id
+            "UPDATE reported_wallpapers SET status = 'resolved_deleted', notes = $2 WHERE id = $1",
+            report_id, notes
         )
         .execute(pool)
         .await?;
@@ -121,10 +129,37 @@ pub async fn resolve_report_db(
             Some(&format!("From report {}", report_id)),
         )
         .await?;
+        
+        if let Some(w) = wp {
+            create_notification_db(&w.author_id, "Wallpaper Deleted", &format!("Your wallpaper '{}' was deleted due to reports.", w.title)).await.ok();
+        }
+    } else if action == "takedown" {
+        sqlx::query!(
+            "UPDATE wallpapers SET moderation_status = 'takedown', is_private = true WHERE id = $1",
+            wallpaper_id
+        ).execute(pool).await?;
+
+        sqlx::query!(
+            "UPDATE reported_wallpapers SET status = 'resolved_takedown', notes = $2 WHERE id = $1",
+            report_id, notes
+        ).execute(pool).await?;
+
+        crate::storage::log_audit_action_db(
+            admin_id,
+            admin_name,
+            "TAKEDOWN_REPORTED_WALLPAPER",
+            &wallpaper_id,
+            "WALLPAPER",
+            Some(&format!("From report {}", report_id)),
+        ).await?;
+
+        if let Some(w) = wp {
+            create_notification_db(&w.author_id, "Wallpaper Takedown", &format!("Your wallpaper '{}' was taken down due to reports.", w.title)).await.ok();
+        }
     } else if action == "dismiss" {
         sqlx::query!(
-            "UPDATE reported_wallpapers SET status = 'dismissed' WHERE id = $1",
-            report_id
+            "UPDATE reported_wallpapers SET status = 'dismissed', notes = $2 WHERE id = $1",
+            report_id, notes
         )
         .execute(pool)
         .await?;

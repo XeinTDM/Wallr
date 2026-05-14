@@ -40,7 +40,7 @@ pub fn AdminDmca() -> Element {
 
     let resolve_action = move |claim_id: String, action: String| {
         spawn(async move {
-            if let Ok(_) = resolve_dmca_claim(claim_id, action).await {
+            if let Ok(_) = resolve_dmca_claim(claim_id, action, None).await {
                 claims_res.restart();
                 toaster.success("DMCA claim resolved successfully");
             } else {
