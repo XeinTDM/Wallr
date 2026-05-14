@@ -1,15 +1,23 @@
 #[cfg(target_os = "windows")]
 pub mod windows_wallpaper {
-    use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, FindWindowExW, FindWindowW, SendMessageTimeoutW, SetParent, SMTO_NORMAL,
+        EnumWindows, FindWindowExW, FindWindowW, SMTO_NORMAL, SendMessageTimeoutW, SetParent,
     };
+    use windows::core::{PCWSTR, w};
 
     static mut WORKERW: HWND = HWND(std::ptr::null_mut());
 
-    unsafe extern "system" fn enum_windows_proc(tophandle: HWND, _lparam: LPARAM) -> windows::core::BOOL {
-        let p = FindWindowExW(Some(tophandle), None, w!("SHELLDLL_DefView"), PCWSTR::null());
+    unsafe extern "system" fn enum_windows_proc(
+        tophandle: HWND,
+        _lparam: LPARAM,
+    ) -> windows::core::BOOL {
+        let p = FindWindowExW(
+            Some(tophandle),
+            None,
+            w!("SHELLDLL_DefView"),
+            PCWSTR::null(),
+        );
         if p.is_ok() {
             let workerw = FindWindowExW(None, Some(tophandle), w!("WorkerW"), PCWSTR::null());
             if let Ok(w) = workerw {
@@ -33,9 +41,9 @@ pub mod windows_wallpaper {
                     1000,
                     Some(&mut result),
                 );
-                
+
                 let _ = EnumWindows(Some(enum_windows_proc), LPARAM(0));
-                
+
                 if !WORKERW.0.is_null() {
                     let _ = SetParent(HWND(hwnd as _), Some(WORKERW));
                 }

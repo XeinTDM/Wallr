@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
 use ui::app::Route;
 
+#[cfg(feature = "desktop")]
+mod cache;
+#[cfg(feature = "desktop")]
+mod config;
 mod win32_wallpaper;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -147,11 +151,14 @@ fn App() -> Element {
             _menu_channel.set(Some(muda::MenuEvent::receiver().clone()));
 
             let manager = GlobalHotKeyManager::new().unwrap();
+            let app_config = crate::config::AppConfig::load();
             let hotkey_w = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyW);
-            let hotkey_right = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowRight);
-            let hotkey_left = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::ArrowLeft);
-            let hotkey_s = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS);
-            let hotkey_h = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
+            let hotkey_right =
+                HotKey::new(app_config.hotkey_next_wp.0, app_config.hotkey_next_wp.1);
+            let hotkey_left =
+                HotKey::new(app_config.hotkey_prev_wp.0, app_config.hotkey_prev_wp.1);
+            let hotkey_s = HotKey::new(app_config.hotkey_save_wp.0, app_config.hotkey_save_wp.1);
+            let hotkey_h = HotKey::new(app_config.hotkey_toggle_ui.0, app_config.hotkey_toggle_ui.1);
 
             let _ = manager.register(hotkey_w);
             let _ = manager.register(hotkey_right);
@@ -164,7 +171,7 @@ fn App() -> Element {
             let id_left = hotkey_left.id();
             let id_s = hotkey_s.id();
             let id_h = hotkey_h.id();
-            
+
             _hotkey_manager.set(Some(manager));
 
             spawn(async move {
@@ -211,31 +218,32 @@ fn App() -> Element {
                             button: MouseButton::Left,
                             ..
                         } = event
-                        {
-                            let window = dioxus::desktop::window();
-                            let is_minimized = window.is_minimized();
-                            let is_visible = window.is_visible();
+                    {
+                        let window = dioxus::desktop::window();
+                        let is_minimized = window.is_minimized();
+                        let is_visible = window.is_visible();
 
-                            if is_minimized || !is_visible {
-                                window.set_minimized(false);
-                                window.set_visible(true);
-                                window.set_focus();
-                            } else {
-                                window.set_minimized(true);
-                                window.set_visible(false);
-                            }
+                        if is_minimized || !is_visible {
+                            window.set_minimized(false);
+                            window.set_visible(true);
+                            window.set_focus();
+                        } else {
+                            window.set_minimized(true);
+                            window.set_visible(false);
                         }
+                    }
 
                     if let Ok(event) = hotkey_channel.try_recv() {
-                        if event.id == id_w || event.id == id_right || event.id == id_left {
+                        if event.id == id_right || event.id == id_left {
                             let mut candidates = vec![];
                             if let Ok((playlist, _)) = api::get_active_playlist_items().await {
                                 candidates = playlist;
                             }
                             if candidates.is_empty()
-                                && let Ok(favs) = api::get_user_favorites(None::<String>, 100).await {
-                                    candidates = favs.to_vec();
-                                }
+                                && let Ok(favs) = api::get_user_favorites(None::<String>, 100).await
+                            {
+                                candidates = favs.to_vec();
+                            }
 
                             if !candidates.is_empty() {
                                 let mut rng = rand::thread_rng();
@@ -260,13 +268,19 @@ fn App() -> Element {
                         } else if event.id == id_s {
                             let _ = tokio::task::spawn_blocking(move || {
                                 if let Ok(path) = wallpaper::get() {
-                                    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| String::from("C:\\"));
-                                    let downloads = std::path::PathBuf::from(home).join("Downloads");
-                                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                    let home = std::env::var("USERPROFILE")
+                                        .unwrap_or_else(|_| String::from("C:\\"));
+                                    let downloads =
+                                        std::path::PathBuf::from(home).join("Downloads");
+                                    let ts = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs();
                                     let dest = downloads.join(format!("wallr_saved_{}.jpg", ts));
                                     let _ = std::fs::copy(path, dest);
                                 }
-                            }).await;
+                            })
+                            .await;
                         }
                     }
 
@@ -288,7 +302,7 @@ fn App() -> Element {
             .join(file_name);
 
         let data = std::fs::read(&full_path).unwrap_or_default();
-        
+
         let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let mime = match ext {
             "mp4" => "video/mp4",
@@ -334,7 +348,7 @@ static LIVE_WP_URL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new
 fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
     let window = dioxus::desktop::window();
     let url_clone = props.url.clone();
-    
+
     use_hook(move || {
         let tao_window = window.window.clone();
         #[cfg(target_os = "windows")]
@@ -343,7 +357,7 @@ fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
             let hwnd = tao_window.hwnd();
             crate::win32_wallpaper::windows_wallpaper::attach_to_desktop(hwnd as isize);
         }
-        
+
         let window_clone = window.clone();
         spawn(async move {
             loop {
@@ -373,15 +387,22 @@ fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
 }
 
 #[cfg(feature = "desktop")]
-async fn apply_wallpaper(
-    window: dioxus::desktop::DesktopContext,
-    wp: api::Wallpaper,
-) {
+async fn apply_wallpaper(window: dioxus::desktop::DesktopContext, wp: api::Wallpaper) {
     if wp.is_live {
         use dioxus::desktop::{Config, WindowBuilder};
-        let filename = wp.image_url.strip_prefix("/assets/uploads/").unwrap_or(&wp.image_url);
-        let url = format!("/upload/{}", filename);
-        
+
+        let path_res = crate::cache::get_cached_wallpaper(&wp.image_url, &wp.id).await;
+        let url = if let Ok(path) = path_res {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            format!("/cache/{}", filename)
+        } else {
+            let filename = wp
+                .image_url
+                .strip_prefix("/assets/uploads/")
+                .unwrap_or(&wp.image_url);
+            format!("/upload/{}", filename)
+        };
+
         if let Ok(mut guard) = LIVE_WP_URL.lock() {
             if *guard == url {
                 return; // Already playing this live wallpaper
@@ -389,12 +410,21 @@ async fn apply_wallpaper(
             *guard = url.clone();
         }
 
-        let dom = dioxus::core::VirtualDom::new_with_props(LiveWallpaperView, LiveWallpaperProps { url });
-        let wb = WindowBuilder::new()
+        let dom =
+            dioxus::core::VirtualDom::new_with_props(LiveWallpaperView, LiveWallpaperProps { url });
+        let mut wb = WindowBuilder::new()
             .with_title("Wallr Live Background")
             .with_decorations(false)
             .with_always_on_bottom(true)
             .with_maximized(true);
+
+        #[cfg(target_os = "linux")]
+        {
+            use dioxus::desktop::tao::platform::unix::WindowBuilderExtUnix;
+            wb = wb.with_window_type(vec![
+                dioxus::desktop::tao::platform::unix::WindowType::Desktop,
+            ]);
+        }
 
         let cfg = Config::new().with_window(wb);
         window.new_window(dom, cfg);
@@ -405,18 +435,30 @@ async fn apply_wallpaper(
 
         let image_url = wp.image_url.clone();
         let wp_id = wp.id.clone();
+
+        let path_res = crate::cache::get_cached_wallpaper(&image_url, &wp_id).await;
+
         let _ = tokio::task::spawn_blocking(move || {
-            let filename = image_url
-                .strip_prefix("/assets/uploads/")
-                .unwrap_or(&image_url);
-            let full_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../ui/assets/uploads")
-                .join(filename);
-            if let Ok(img) = image::open(&full_path) {
-                let temp_dir = std::env::temp_dir();
-                let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
-                if img.save(&temp_path).is_ok() {
-                    let _ = wallpaper::set_from_path(temp_path.to_str().unwrap());
+            if let Ok(cached_path) = path_res {
+                if let Ok(img) = image::open(&cached_path) {
+                    let temp_dir = std::env::temp_dir();
+                    let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
+                    if img.save(&temp_path).is_ok() {
+                        if let Some(path_str) = temp_path.to_str() {
+                            let _ = wallpaper::set_from_path(path_str);
+                            let config = crate::config::AppConfig::load();
+                            let mode = match config.wallpaper_mode.as_str() {
+                                "Center" => wallpaper::Mode::Center,
+                                "Crop" => wallpaper::Mode::Crop,
+                                "Fit" => wallpaper::Mode::Fit,
+                                "Span" => wallpaper::Mode::Span,
+                                "Stretch" => wallpaper::Mode::Stretch,
+                                "Tile" => wallpaper::Mode::Tile,
+                                _ => wallpaper::Mode::Crop,
+                            };
+                            let _ = wallpaper::set_mode(mode);
+                        }
+                    }
                 }
             }
         })
