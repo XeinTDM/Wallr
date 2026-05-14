@@ -156,4 +156,43 @@ pub async fn delete_collection(collection_id: String) -> Result<(), ServerFnErro
         .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())
 }
 
+pub(crate) fn can_edit_collection(user_id: &str, user_role: &str, owner_id: &str) -> bool {
+    owner_id == user_id || user_role == "admin" || user_role == "super_admin"
+}
 
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_can_edit_collection_owner() {
+        assert!(can_edit_collection("user1", "user", "user1"));
+    }
+
+    #[test]
+    fn test_can_edit_collection_admin() {
+        assert!(can_edit_collection("admin1", "admin", "user1"));
+        assert!(can_edit_collection("super1", "super_admin", "user1"));
+    }
+
+    #[test]
+    fn test_cannot_edit_collection_other_user() {
+        assert!(!can_edit_collection("user2", "user", "user1"));
+        assert!(!can_edit_collection("user2", "moderator", "user1")); // Mods can't edit personal collections unless specified
+    }
+}
+
+
+
+#[server]
+pub async fn get_collection(collection_id: String) -> Result<crate::UserCollection, ServerFnError> {
+    let user_opt = require_auth().await.ok();
+    let caller_id = user_opt.as_ref().map(|u| u.id.as_str());
+    let is_admin = user_opt.as_ref().map_or(false, |u| u.role == "admin" || u.role == "super_admin");
+
+    let col = crate::storage::get_collection_db(&collection_id, caller_id, is_admin)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+
+    col.ok_or_else(|| ServerFnError::new("api_err_collection_not_found"))
+}

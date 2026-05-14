@@ -1,11 +1,15 @@
-use crate::LoadingScreen;
-use api::get_collections;
+use crate::{LoadingScreen, use_toaster};
+use crate::app::Route;
+use api::{get_collections, create_user_collection};
 use dioxus::prelude::*;
+use crate::views::profile::CreateCollectionModal;
 
 #[component]
 pub fn Collections() -> Element {
     let i18n = crate::i18n::use_i18n();
     let collections = use_resource(move || async move { get_collections().await });
+    let mut is_create_collection_modal_open = use_signal(|| false);
+    let toaster = use_toaster();
 
     rsx! {
         div {
@@ -26,6 +30,7 @@ pub fn Collections() -> Element {
                 button {
                     class: "btn-primary",
                     style: "padding: 12px 24px; border-radius: 12px;",
+                    onclick: move |_| is_create_collection_modal_open.set(true),
                     "{i18n.t(\"collections_create_btn\")}"
                 }
             }
@@ -49,6 +54,22 @@ pub fn Collections() -> Element {
                     None => rsx! { LoadingScreen {} }
                 }
             }
+
+            CreateCollectionModal {
+                is_open: is_create_collection_modal_open,
+                on_create: move |name: String| {
+                    let mut toaster = toaster;
+                    let mut cols = collections;
+                    spawn(async move {
+                        if let Ok(_) = create_user_collection(name, None, false).await {
+                            toaster.success(i18n.t("success_collection_created"));
+                            cols.restart();
+                        } else {
+                            toaster.error(i18n.t("err_create_collection"));
+                        }
+                    });
+                },
+            }
         }
     }
 }
@@ -57,9 +78,10 @@ pub fn Collections() -> Element {
 fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Element {
     let i18n = crate::i18n::use_i18n();
     rsx! {
-        div {
+        Link {
+            to: Route::CollectionDetail { id: id.clone() },
             class: "glass collection-card glow-hover",
-            style: "border-radius: 24px; overflow: hidden; cursor: pointer; transition: all 0.3s ease;",
+            style: "border-radius: 24px; overflow: hidden; cursor: pointer; transition: all 0.3s ease; display: block; text-decoration: none;",
 
             div {
                 style: "height: 200px; position: relative;",
@@ -75,7 +97,7 @@ fn CollectionCard(id: String, name: String, count: u32, cover: String) -> Elemen
 
             div {
                 style: "padding: 20px;",
-                h3 { style: "font-size: 20px; font-weight: 800; margin-bottom: 4px;", "{name}" }
+                h3 { style: "font-size: 20px; font-weight: 800; margin-bottom: 4px; color: white;", "{name}" }
                 span { style: "color: var(--text-muted); font-size: 14px;", "{i18n.t(\"collections_shared\")}" }
             }
         }

@@ -245,10 +245,28 @@ async fn oauth_callback(
         .await
         .unwrap_or(None);
 
-    let user = if let Some(existing_user) = user_record {
+    let user = if let mut existing_user = user_record {
         crate::storage::link_oauth_account(&existing_user.user.id, &provider, &provider_id)
             .await
             .ok();
+
+        if !existing_user.user.is_verified {
+            if let Ok(pool) = crate::storage::get_pool() {
+                let _ = sqlx::query("INSERT INTO user_verifications (user_id, is_verified) VALUES ($1, true) ON CONFLICT (user_id) DO UPDATE SET is_verified = true, verification_token = NULL")
+                    .bind(uuid::Uuid::parse_str(&existing_user.user.id).unwrap_or_default())
+                    .execute(pool)
+                    .await;
+                
+                let _ = sqlx::query("UPDATE users SET token_version = token_version + 1 WHERE id = $1")
+                    .bind(&existing_user.user.id)
+                    .execute(pool)
+                    .await;
+                    
+                crate::storage::cache::get_user_cache().remove(&existing_user.user.id).await;
+            }
+            existing_user.user.is_verified = true;
+        }
+        
         existing_user.user
     } else {
         use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
@@ -276,6 +294,7 @@ async fn oauth_callback(
             download_quality: "Original (4K+)".to_string(),
             auto_download_avif: true,
             safe_search: true,
+            is_verified: true,
         };
 
         let mut record = crate::UserRecord {
@@ -314,6 +333,13 @@ async fn oauth_callback(
             if crate::storage::create_user(&record).await.is_err() {
                 return Redirect::to("/login?error=create_user_failed").into_response();
             }
+        }
+
+        if let Ok(pool) = crate::storage::get_pool() {
+            let _ = sqlx::query("INSERT INTO user_verifications (user_id, is_verified) VALUES ($1, true)")
+                .bind(uuid::Uuid::parse_str(&new_user.id).unwrap_or_default())
+                .execute(pool)
+                .await;
         }
 
         crate::storage::link_oauth_account(&new_user.id, &provider, &provider_id)

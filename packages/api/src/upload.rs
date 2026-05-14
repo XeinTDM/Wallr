@@ -587,3 +587,30 @@ async fn enforce_moderation_ban(
 
     Ok(())
 }
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_upload_job_payload_serialization() {
+        let payload = UploadJobPayload {
+            id: "job123".to_string(),
+            title: "Test Wallpaper".to_string(),
+            description: Some("A nice wallpaper".to_string()),
+            source_url: None,
+            author_id: "user123".to_string(),
+            author_name: "TestUser".to_string(),
+            user_tags: vec!["nature".to_string(), "landscape".to_string()],
+            is_private: false,
+        };
+
+        let serialized = serde_json::to_string(&payload).expect("Should serialize");
+        assert!(serialized.contains("job123"));
+        assert!(serialized.contains("nature"));
+
+        let deserialized: UploadJobPayload = serde_json::from_str(&serialized).expect("Should deserialize");
+        assert_eq!(deserialized.id, payload.id);
+        assert_eq!(deserialized.user_tags, payload.user_tags);
+    }
+}

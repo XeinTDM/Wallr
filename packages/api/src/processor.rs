@@ -135,3 +135,57 @@ pub fn generate_thumbnail(img: &DynamicImage, size: u32) -> Vec<u8> {
         .unwrap();
     buffer.into_inner()
 }
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+    use image::{RgbaImage, DynamicImage};
+
+    fn create_test_image() -> DynamicImage {
+        let mut img = RgbaImage::new(100, 100);
+        for x in 0..100 {
+            for y in 0..100 {
+                if x < 50 {
+                    img.put_pixel(x, y, image::Rgba([255, 0, 0, 255])); // Red half
+                } else {
+                    img.put_pixel(x, y, image::Rgba([0, 0, 255, 255])); // Blue half
+                }
+            }
+        }
+        DynamicImage::ImageRgba8(img)
+    }
+
+    #[test]
+    fn test_extract_dominant_colors() {
+        let img = create_test_image();
+        let colors = extract_dominant_colors(&img);
+        
+        assert!(!colors.is_empty(), "Should extract at least one color");
+        assert!(colors.contains(&"#FF0000".to_string()) || colors.contains(&"#0000FF".to_string()), "Should contain primary colors");
+    }
+
+    #[test]
+    fn test_generate_thumbnail() {
+        let img = create_test_image();
+        let thumb = generate_thumbnail(&img, 50);
+        
+        assert!(!thumb.is_empty(), "Thumbnail should not be empty");
+        
+        // Verify it's a valid JPEG
+        let decoded = image::load_from_memory(&thumb).expect("Should be valid image");
+        assert!(decoded.width() <= 50);
+        assert!(decoded.height() <= 50);
+    }
+
+    #[test]
+    fn test_convert_to_avif() {
+        let img = create_test_image();
+        let avif = convert_to_avif(&img).expect("Should convert to AVIF");
+        
+        assert!(!avif.is_empty(), "AVIF should not be empty");
+        // AVIF header starts with ftypavif or similar at offset 4
+        assert!(avif.len() > 12);
+        assert_eq!(&avif[4..8], b"ftyp");
+    }
+}
+

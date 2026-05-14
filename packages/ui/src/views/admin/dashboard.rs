@@ -182,6 +182,13 @@ pub fn AdminDashboard() -> Element {
                             "DMCA Claims"
                             ArrowRight { size: 18 }
                         }
+                        Link {
+                            to: Route::AdminEditorial {},
+                            class: "glow-hover",
+                            style: "padding: 12px 24px; border-radius: 12px; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.5); color: #c084fc; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;",
+                            "Editorial"
+                            ArrowRight { size: 18 }
+                        }
                     }
                 }
             }

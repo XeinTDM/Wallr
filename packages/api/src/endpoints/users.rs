@@ -92,6 +92,15 @@ pub async fn get_public_profile(username: String) -> Result<Option<PublicUser>, 
 }
 
 #[server]
+pub async fn get_public_profile_by_id(id: String) -> Result<Option<PublicUser>, ServerFnError> {
+    let user = crate::storage::get_user_by_id(&id)
+        .await
+        .map_err(|e| crate::error::ApiError::from(e).into_server_fn_err())?;
+    
+    Ok(user.map(|u| PublicUser::from(u.user)))
+}
+
+#[server]
 pub async fn get_public_uploads(
     username: String,
     page: u32,

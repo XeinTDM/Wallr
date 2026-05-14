@@ -1,4 +1,5 @@
 use crate::views::*;
+use crate::views::admin::editorial::AdminEditorial;
 use crate::{DropdownSection, ExploreDropdown, Navbar};
 use dioxus::prelude::*;
 
@@ -99,6 +100,8 @@ pub enum Route {
             AdminAppeals {},
             #[route("/admin/dmca")]
             AdminDmca {},
+            #[route("/admin/editorial")]
+            AdminEditorial {},
         #[end_layout]
         #[route("/:..route")]
         NotFound { route: Vec<String> },

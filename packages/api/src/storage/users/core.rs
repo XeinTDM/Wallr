@@ -8,7 +8,18 @@ pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>
         .fetch_optional(pool)
         .await?;
 
-    Ok(row.map(|r| UserRecord {
+    let r = match row {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let is_verified = sqlx::query_scalar::<_, bool>("SELECT is_verified FROM user_verifications WHERE user_id = $1")
+        .bind(uuid::Uuid::parse_str(&r.id).unwrap_or_default())
+        .fetch_optional(pool)
+        .await?
+        .unwrap_or(false);
+
+    Ok(Some(UserRecord {
         user: User {
             id: r.id,
             name: r.name,
@@ -26,6 +37,7 @@ pub async fn get_user_by_email(email: &str) -> anyhow::Result<Option<UserRecord>
             download_quality: r.download_quality,
             auto_download_avif: r.auto_download_avif,
             safe_search: r.safe_search,
+            is_verified,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -38,7 +50,18 @@ pub async fn get_user_by_name(name: &str) -> anyhow::Result<Option<UserRecord>> 
         .fetch_optional(pool)
         .await?;
 
-    Ok(row.map(|r| UserRecord {
+    let r = match row {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let is_verified = sqlx::query_scalar::<_, bool>("SELECT is_verified FROM user_verifications WHERE user_id = $1")
+        .bind(uuid::Uuid::parse_str(&r.id).unwrap_or_default())
+        .fetch_optional(pool)
+        .await?
+        .unwrap_or(false);
+
+    Ok(Some(UserRecord {
         user: User {
             id: r.id,
             name: r.name,
@@ -56,6 +79,7 @@ pub async fn get_user_by_name(name: &str) -> anyhow::Result<Option<UserRecord>> 
             download_quality: r.download_quality,
             auto_download_avif: r.auto_download_avif,
             safe_search: r.safe_search,
+            is_verified,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -73,7 +97,18 @@ pub async fn get_user_by_id(id: &str) -> anyhow::Result<Option<UserRecord>> {
         .fetch_optional(pool)
         .await?;
 
-    let result = row.map(|r| UserRecord {
+    let r = match row {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let is_verified = sqlx::query_scalar::<_, bool>("SELECT is_verified FROM user_verifications WHERE user_id = $1")
+        .bind(uuid::Uuid::parse_str(&r.id).unwrap_or_default())
+        .fetch_optional(pool)
+        .await?
+        .unwrap_or(false);
+
+    let result = Some(UserRecord {
         user: User {
             id: r.id,
             name: r.name,
@@ -91,6 +126,7 @@ pub async fn get_user_by_id(id: &str) -> anyhow::Result<Option<UserRecord>> {
             download_quality: r.download_quality,
             auto_download_avif: r.auto_download_avif,
             safe_search: r.safe_search,
+            is_verified,
         },
         password_hash: r.password_hash,
         token_version: r.token_version,
@@ -246,9 +282,15 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
     .fetch_all(pool)
     .await?;
 
-    let users = rows
-        .into_iter()
-        .map(|r| User {
+    let mut users = Vec::new();
+    for r in rows {
+        let is_verified = sqlx::query_scalar::<_, bool>("SELECT is_verified FROM user_verifications WHERE user_id = $1")
+            .bind(uuid::Uuid::parse_str(&r.id).unwrap_or_default())
+            .fetch_optional(pool)
+            .await?
+            .unwrap_or(false);
+
+        users.push(User {
             id: r.id,
             name: r.name,
             email: r.email,
@@ -265,8 +307,9 @@ pub async fn search_users(query: &str, limit: u32) -> anyhow::Result<Vec<User>> 
             download_quality: r.download_quality,
             auto_download_avif: r.auto_download_avif,
             safe_search: r.safe_search,
-        })
-        .collect();
+            is_verified,
+        });
+    }
 
     Ok(users)
 }

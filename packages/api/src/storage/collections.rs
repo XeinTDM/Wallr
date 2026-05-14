@@ -278,3 +278,50 @@ pub async fn get_collection_owner(collection_id: &str) -> anyhow::Result<Option<
     Ok(row.map(|r| r.user_id))
 }
 
+pub async fn get_collection_db(
+    collection_id: &str,
+    caller_id: Option<&str>,
+    is_admin: bool,
+) -> anyhow::Result<Option<crate::UserCollection>> {
+    let pool = get_pool()?;
+    let row = sqlx::query!(
+        r#"
+        SELECT 
+            c.id, c.user_id, c.name, c.description, c.is_private, c.created_at,
+            COALESCE(ic.count, 0) as item_count,
+            lc.thumbnail_url as "cover_url?"
+        FROM user_collections c
+        LEFT JOIN (
+            SELECT collection_id, COUNT(*) as count
+            FROM collection_items
+            GROUP BY collection_id
+        ) ic ON ic.collection_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT w.thumbnail_url
+            FROM collection_items ci
+            JOIN wallpapers w ON w.id = ci.wallpaper_id
+            WHERE ci.collection_id = c.id
+            ORDER BY ci.added_at DESC
+            LIMIT 1
+        ) lc ON true
+        WHERE c.id = $1 AND ($2 = true OR c.is_private = false OR c.user_id = $3)
+        "#,
+        collection_id,
+        is_admin,
+        caller_id as Option<&str>
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| crate::UserCollection {
+        id: r.id,
+        user_id: r.user_id,
+        name: r.name,
+        description: r.description,
+        is_private: r.is_private,
+        item_count: r.item_count.unwrap_or(0) as u32,
+        cover_url: r.cover_url,
+        created_at: r.created_at,
+    }))
+}
+

@@ -59,3 +59,37 @@ pub async fn contains_forbidden_words(text: &str) -> bool {
         ModerationSeverity::Severe | ModerationSeverity::Moderate
     )
 }
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_profanity_safe() {
+        let result = evaluate_content("This is a completely safe and normal sentence.").await;
+        assert_eq!(result.severity, ModerationSeverity::Safe);
+        assert!(result.flags.is_empty());
+        assert!(!contains_forbidden_words("This is a completely safe and normal sentence.").await);
+    }
+
+    #[tokio::test]
+    async fn test_profanity_mild() {
+        // 'crap' is usually considered mild
+        let result = evaluate_content("This is crap.").await;
+        // The exact severity depends on rustrict, but it should not be Safe and probably not Severe
+        assert_ne!(result.severity, ModerationSeverity::Safe);
+    }
+
+    #[tokio::test]
+    async fn test_self_harm_filter() {
+        let result = evaluate_content("You should kill yourself").await;
+        assert_eq!(result.severity, ModerationSeverity::Severe);
+        assert!(result.flags.contains(&"SELF_HARM"));
+        assert!(contains_forbidden_words("You should kill yourself").await);
+
+        let result2 = evaluate_content("kys right now").await;
+        assert_eq!(result2.severity, ModerationSeverity::Severe);
+        assert!(result2.flags.contains(&"SELF_HARM"));
+    }
+}
+

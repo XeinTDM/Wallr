@@ -90,6 +90,8 @@ pub struct User {
     pub download_quality: String,
     pub auto_download_avif: bool,
     pub safe_search: bool,
+    #[serde(default)]
+    pub is_verified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

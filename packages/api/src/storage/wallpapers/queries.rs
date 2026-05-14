@@ -524,3 +524,76 @@ pub async fn get_similar_wallpapers_db(
 
     Ok(std::sync::Arc::new(vec![]))
 }
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+    use crate::FilterOptions;
+    use sqlx::QueryBuilder;
+
+    #[test]
+    fn test_apply_filters_resolution() {
+        let mut filters = FilterOptions::default();
+        filters.resolution = "4k".to_string();
+
+        let mut q = QueryBuilder::new("SELECT * FROM wallpapers w WHERE 1=1");
+        apply_filters(&mut q, &filters);
+
+        let sql = q.sql();
+        assert!(sql.contains("w.is_private = false"));
+        assert!(sql.contains("w.width >= 3840 AND w.height >= 2160"));
+    }
+
+    #[test]
+    fn test_apply_filters_aspect_ratio() {
+        let mut filters = FilterOptions::default();
+        filters.aspect_ratio = "ultrawide".to_string();
+
+        let mut q = QueryBuilder::new("SELECT * FROM wallpapers w WHERE 1=1");
+        apply_filters(&mut q, &filters);
+
+        let sql = q.sql();
+        assert!(sql.contains("(w.width::float / w.height::float) >= 2.3"));
+    }
+
+    #[test]
+    fn test_apply_filters_safe_search() {
+        let mut filters = FilterOptions::default();
+        filters.safe_search = true;
+
+        let mut q = QueryBuilder::new("SELECT * FROM wallpapers w WHERE 1=1");
+        apply_filters(&mut q, &filters);
+
+        let sql = q.sql();
+        assert!(sql.contains("NOT (w.tags @> '[\"nsfw\"]')"));
+    }
+
+    #[test]
+    fn test_apply_filters_timeframe() {
+        let mut filters = FilterOptions::default();
+        filters.timeframe = "weekly".to_string();
+
+        let mut q = QueryBuilder::new("SELECT * FROM wallpapers w WHERE 1=1");
+        apply_filters(&mut q, &filters);
+
+        let sql = q.sql();
+        assert!(sql.contains("w.created_at >= NOW() - INTERVAL '7 days'"));
+    }
+
+    #[test]
+    fn test_apply_filters_combined() {
+        let mut filters = FilterOptions::default();
+        filters.resolution = "hd".to_string();
+        filters.orientation = "landscape".to_string();
+        filters.safe_search = true;
+
+        let mut q = QueryBuilder::new("SELECT * FROM wallpapers w WHERE 1=1");
+        apply_filters(&mut q, &filters);
+
+        let sql = q.sql();
+        assert!(sql.contains("w.width >= 1920 AND w.height >= 1080"));
+        assert!(sql.contains("w.width > w.height"));
+        assert!(sql.contains("NOT (w.tags @> '[\"nsfw\"]')"));
+    }
+}
+

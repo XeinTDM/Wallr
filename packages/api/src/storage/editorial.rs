@@ -79,11 +79,12 @@ pub async fn get_editorial_collection_wallpapers(
     let pool = get_pool()?;
     let rows = sqlx::query!(
         r#"
-        SELECT w.id, w.title, w.author as "author_name", w.image_url, w.thumbnail_url, 
-               w.tags, w.primary_colors, w.width, w.height, w.size_bytes, w.likes, 
-               w.downloads, w.search_vector, w.created_at, w.is_private, w.is_live
+        SELECT w.id, w.title, w.author_id, u.name as "author_name!", w.image_url, w.thumbnail_url, 
+               w.tags as "tags: sqlx::types::Json<Vec<String>>", w.primary_colors as "primary_colors: sqlx::types::Json<Vec<String>>", w.width, w.height, w.size_bytes, w.likes, 
+               w.downloads, w.created_at, w.is_private, w.is_live, w.description, w.source_url
         FROM editorial_collection_items ci
         JOIN wallpapers w ON w.id = ci.wallpaper_id
+        JOIN users u ON w.author_id = u.id
         WHERE ci.collection_id = $1
         ORDER BY ci.sort_order ASC, ci.added_at DESC
         LIMIT $2 OFFSET $3
@@ -100,23 +101,23 @@ pub async fn get_editorial_collection_wallpapers(
         .map(|r| Wallpaper {
             id: r.id,
             title: r.title,
-            author_id: "".to_string(), // Default since it was not stored previously or author is just string
+            author_id: r.author_id,
             author_name: r.author_name,
             image_url: r.image_url,
             thumbnail_url: r.thumbnail_url,
-            tags: serde_json::from_value(r.tags).unwrap_or_default(),
-            primary_colors: serde_json::from_value(r.primary_colors).unwrap_or_default(),
+            tags: r.tags.0,
+            primary_colors: r.primary_colors.0,
             dimensions: (r.width as u32, r.height as u32),
             size_bytes: r.size_bytes as u64,
             likes: r.likes.unwrap_or(0) as u32,
             downloads: r.downloads.unwrap_or(0) as u32,
-            created_at: r.created_at.unwrap_or_else(|| chrono::Utc::now()),
-            is_private: r.is_private.unwrap_or(false),
+            created_at: r.created_at,
+            is_private: r.is_private,
             is_live: r.is_live.unwrap_or(false),
             embedding: None,
             phash: None,
-            description: None,
-            source_url: None,
+            description: r.description,
+            source_url: r.source_url,
         })
         .collect())
 }

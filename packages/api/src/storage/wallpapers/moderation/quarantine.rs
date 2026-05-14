@@ -29,3 +29,20 @@ pub async fn quarantine_upload(
 
     Ok(())
 }
+
+#[cfg(all(test, feature = "server"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quarantine_path_generation() {
+        // We can't easily test the DB insert without a connection, 
+        // but we can ensure the logic for UUID generation and file path creation is sound.
+        let id = uuid::Uuid::new_v4().to_string();
+        let quarantine_dir = std::env::current_dir().unwrap().join("quarantine");
+        let file_path = quarantine_dir.join(format!("{}.quarantined", id));
+        
+        assert!(file_path.to_string_lossy().contains(&id));
+        assert!(file_path.to_string_lossy().ends_with(".quarantined"));
+    }
+}

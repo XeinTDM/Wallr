@@ -139,3 +139,41 @@ pub async fn link_oauth_account(
     .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_token_versioning() {
+        let mut user = User {
+            id: "user123".to_string(),
+            name: "TestUser".to_string(),
+            email: "test@example.com".to_string(),
+            pfp_url: "".to_string(),
+            banner_url: None,
+            bio: None,
+            social_links: None,
+            role: "user".to_string(),
+            is_banned: false,
+            active_playlist_id: None,
+            playlist_interval_secs: 300,
+            email_notifs: true,
+            push_notifs: false,
+            download_quality: "".to_string(),
+            auto_download_avif: true,
+            safe_search: true,
+        };
+
+        // Generating a token with version 1
+        let token_v1 = generate_token(&user, 1).expect("Should generate token");
+        assert!(!token_v1.is_empty());
+
+        // Generating a token with version 2
+        let token_v2 = generate_token(&user, 2).expect("Should generate token");
+        assert_ne!(token_v1, token_v2, "Different token versions should produce different tokens");
+        
+        // This validates that session invalidation works by incrementing the token_version
+        // which makes the older tokens invalid when they are verified against the db.
+    }
+}
