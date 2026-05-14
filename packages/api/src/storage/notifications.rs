@@ -16,6 +16,59 @@ pub async fn create_notification_db(
     )
     .execute(pool)
     .await?;
+
+    // Dispatch external notifications based on user preferences
+    if let Ok(user_record) = super::users::core::get_user_by_id(user_id).await {
+        if let Some(record) = user_record {
+            let u = record.user;
+            if u.email_notifs {
+                // Dispatch email
+                println!("📧 DISPATCH EMAIL to {}: [{}] {}", u.email, title, message);
+                // In a real app we'd use an SMTP client or Resend/SendGrid API here.
+            }
+
+            if u.push_notifs {
+                if let Ok(pool) = get_pool() {
+                    let subs = sqlx::query!(
+                        "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1",
+                        user_id
+                    ).fetch_all(pool).await.unwrap_or_default();
+
+                    for sub in subs {
+                        // Dispatch push
+                        println!("📱 DISPATCH PUSH to {}: [{}] {}", sub.endpoint, title, message);
+                        // In a real app we'd use a WebPush library here.
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn add_push_subscription_db(user_id: &str, endpoint: &str, p256dh: &str, auth: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    let id = uuid::Uuid::new_v4().to_string();
+    
+    // Check if endpoint already exists for this user to avoid duplicates
+    let existing = sqlx::query!("SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2", user_id, endpoint)
+        .fetch_optional(pool).await?;
+        
+    if existing.is_none() {
+        sqlx::query!(
+            "INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth) VALUES ($1, $2, $3, $4, $5)",
+            id, user_id, endpoint, p256dh, auth
+        ).execute(pool).await?;
+    }
+    
+    Ok(())
+}
+
+pub async fn remove_push_subscription_db(user_id: &str, endpoint: &str) -> anyhow::Result<()> {
+    let pool = get_pool()?;
+    sqlx::query!("DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2", user_id, endpoint)
+        .execute(pool).await?;
     Ok(())
 }
 
