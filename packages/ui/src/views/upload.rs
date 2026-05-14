@@ -240,7 +240,7 @@ pub fn Upload() -> Element {
                                     toaster.error(i18n.t("err_file_too_large"));
                                 } else {
                                     use base64::Engine;
-                                    let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else { "image/png" };
+                                    let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else if name.to_lowercase().ends_with(".mp4") { "video/mp4" } else if name.to_lowercase().ends_with(".webm") { "video/webm" } else { "image/png" };
                                     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                                     selected_file.set(Some((name.clone(), bytes.to_vec(), format!("data:{};base64,{}", mime, b64), bytes.len())));
                                 }
@@ -250,7 +250,7 @@ pub fn Upload() -> Element {
 
                     input {
                         r#type: "file",
-                        accept: "image/*",
+                        accept: "image/*,video/mp4,video/webm",
                         style: "display: none;",
                         onchange: move |e| async move {
                             let files = e.files();
@@ -262,7 +262,7 @@ pub fn Upload() -> Element {
                                         toaster.error(i18n.t("err_file_too_large"));
                                     } else {
                                         use base64::Engine;
-                                        let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else { "image/png" };
+                                        let mime = if name.to_lowercase().ends_with(".png") { "image/png" } else if name.to_lowercase().ends_with(".jpg") || name.to_lowercase().ends_with(".jpeg") { "image/jpeg" } else if name.to_lowercase().ends_with(".avif") { "image/avif" } else if name.to_lowercase().ends_with(".webp") { "image/webp" } else if name.to_lowercase().ends_with(".gif") { "image/gif" } else if name.to_lowercase().ends_with(".bmp") { "image/bmp" } else if name.to_lowercase().ends_with(".tiff") || name.to_lowercase().ends_with(".tif") { "image/tiff" } else if name.to_lowercase().ends_with(".mp4") { "video/mp4" } else if name.to_lowercase().ends_with(".webm") { "video/webm" } else { "image/png" };
                                         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                                         selected_file.set(Some((name.clone(), bytes.to_vec(), format!("data:{};base64,{}", mime, b64), bytes.len())));
                                     }
