@@ -4,6 +4,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn Search(query: Option<String>) -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "rating".to_string());
@@ -35,7 +37,7 @@ pub fn Search(query: Option<String>) -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
-            safe_search: true,
+            safe_search: safe_search_enabled,
             ..Default::default()
         };
         async move {

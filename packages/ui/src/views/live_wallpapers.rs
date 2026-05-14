@@ -4,6 +4,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn LiveWallpapers() -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
     let sort = use_signal(|| "rating".to_string());
@@ -13,7 +15,7 @@ pub fn LiveWallpapers() -> Element {
     let timeframe = use_signal(String::new);
 
     let initial_res = use_server_future(move || async move {
-        let filters = api::FilterOptions::default();
+        let filters = api::FilterOptions { safe_search: safe_search_enabled, ..Default::default() };
         api::get_wallpapers_by_tag("live".to_string(), None, 20, filters).await.unwrap_or_default()
     })?;
 
@@ -30,7 +32,7 @@ pub fn LiveWallpapers() -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
-            safe_search: true,
+            safe_search: safe_search_enabled,
             ..Default::default()
         };
         async move {

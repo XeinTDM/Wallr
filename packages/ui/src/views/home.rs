@@ -10,10 +10,12 @@ enum FeedTab {
 
 #[component]
 pub fn Home() -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let mut tab = use_signal(|| FeedTab::Trending);
 
     let initial_trending_res = use_server_future(move || async move {
-        get_wallpapers(None, 20, api::FilterOptions::default())
+        get_wallpapers(None, 20, api::FilterOptions { safe_search: safe_search_enabled, ..Default::default() })
             .await
             .unwrap_or_default()
     })?;
@@ -67,7 +69,7 @@ pub fn Home() -> Element {
             return;
         }
 
-        if let Ok(new_wps) = get_wallpapers(c, 20, api::FilterOptions::default()).await {
+        if let Ok(new_wps) = get_wallpapers(c, 20, api::FilterOptions { safe_search: safe_search_enabled, ..Default::default() }).await {
             if new_wps.is_empty() {
                 trending_has_more.set(false);
             } else {

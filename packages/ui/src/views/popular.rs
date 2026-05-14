@@ -4,6 +4,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn PopularSelection() -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let _safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
@@ -50,6 +52,8 @@ fn PopularSection(
     color: Signal<String>,
     ai_filter: Signal<String>,
 ) -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let i18n = crate::i18n::use_i18n();
     let period_for_resource = period.clone();
     let wallpapers = use_resource(move || {
@@ -62,7 +66,7 @@ fn PopularSection(
             color: color(),
             ai_filter: ai_filter(),
             timeframe: period_clone.clone(),
-            safe_search: true,
+            safe_search: safe_search_enabled,
             ..Default::default()
         };
         async move {
@@ -120,6 +124,8 @@ fn PopularSection(
 
 #[component]
 pub fn PopularGrid(period: String) -> Element {
+    let user_ctx = use_context::<Signal<crate::app::AuthState>>();
+    let safe_search_enabled = match user_ctx() { crate::app::AuthState::Authenticated(u) => u.safe_search, _ => true };
     let i18n = crate::i18n::use_i18n();
     let category = use_signal(String::new);
     let resolution = use_signal(String::new);
@@ -150,7 +156,7 @@ pub fn PopularGrid(period: String) -> Element {
             color: color(),
             ai_filter: ai_filter(),
             timeframe: timeframe(),
-            safe_search: true,
+            safe_search: safe_search_enabled,
             ..Default::default()
         };
 
