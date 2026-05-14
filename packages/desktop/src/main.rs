@@ -5,6 +5,7 @@ use ui::app::Route;
 mod cache;
 #[cfg(feature = "desktop")]
 mod config;
+mod engine;
 mod win32_wallpaper;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -120,6 +121,17 @@ fn App() -> Element {
         let mut _menu_channel = use_signal(|| None::<muda::MenuEventReceiver>);
         let mut _hotkey_manager = use_signal(|| None::<GlobalHotKeyManager>);
 
+        use_context_provider(|| {
+            let (engine, rx) = crate::engine::WallpaperEngine::new();
+            let window = dioxus::desktop::window();
+            let state = engine.get_state();
+            spawn(crate::engine::run_engine_loop(state, rx, window));
+            crate::engine::WallpaperEngine::start_monitor_loop(engine.clone());
+            Signal::new(engine)
+        });
+        
+        let engine = use_context::<Signal<crate::engine::WallpaperEngine>>();
+
         use_hook(move || {
             let icon_bytes = include_bytes!("../assets/favicon.ico");
             let icon_image = image::load_from_memory(icon_bytes)
@@ -187,8 +199,11 @@ fn App() -> Element {
                             last_sync = Some(std::time::Instant::now());
                             let mut rng = rand::thread_rng();
                             if let Some(wp) = playlist.choose(&mut rng) {
-                                let window = dioxus::desktop::window();
-                                apply_wallpaper(window, wp.clone()).await;
+                                let engine_clone = engine.cloned();
+                                engine_clone.send_command(crate::engine::EngineCommand::ApplyWallpaper {
+                                    monitor_name: None,
+                                    wallpaper: wp.clone(),
+                                }).await;
                             }
                         }
                     }
@@ -248,8 +263,16 @@ fn App() -> Element {
                             if !candidates.is_empty() {
                                 let mut rng = rand::thread_rng();
                                 if let Some(wp) = candidates.choose(&mut rng) {
-                                    let window = dioxus::desktop::window();
-                                    apply_wallpaper(window, wp.clone()).await;
+                                    if event.id == id_left {
+                                        let engine_clone = engine.cloned();
+                                        engine_clone.send_command(crate::engine::EngineCommand::GoBack).await;
+                                    } else {
+                                        let engine_clone = engine.cloned();
+                                        engine_clone.send_command(crate::engine::EngineCommand::ApplyWallpaper {
+                                            monitor_name: None,
+                                            wallpaper: wp.clone(),
+                                        }).await;
+                                    }
                                 }
                             }
                         } else if event.id == id_h {
@@ -336,19 +359,16 @@ fn App() -> Element {
 
 #[cfg(feature = "desktop")]
 #[derive(Props, Clone, PartialEq)]
-struct LiveWallpaperProps {
+pub struct LiveWallpaperProps {
     url: String,
+    monitor_name: String,
 }
 
 #[cfg(feature = "desktop")]
-static LIVE_WP_URL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
-
-#[cfg(feature = "desktop")]
 #[component]
-fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
+pub fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
     let window = dioxus::desktop::window();
-    let url_clone = props.url.clone();
-
+    
     use_hook(move || {
         let tao_window = window.window.clone();
         #[cfg(target_os = "windows")]
@@ -357,19 +377,6 @@ fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
             let hwnd = tao_window.hwnd();
             crate::win32_wallpaper::windows_wallpaper::attach_to_desktop(hwnd as isize);
         }
-
-        let window_clone = window.clone();
-        spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if let Ok(guard) = LIVE_WP_URL.lock() {
-                    if *guard != url_clone {
-                        window_clone.close();
-                        break;
-                    }
-                }
-            }
-        });
     });
 
     rsx! {
@@ -383,85 +390,5 @@ fn LiveWallpaperView(props: LiveWallpaperProps) -> Element {
                 style: "width: 100%; height: 100%; object-fit: cover; object-position: center;"
             }
         }
-    }
-}
-
-#[cfg(feature = "desktop")]
-async fn apply_wallpaper(window: dioxus::desktop::DesktopContext, wp: api::Wallpaper) {
-    if wp.is_live {
-        use dioxus::desktop::{Config, WindowBuilder};
-
-        let path_res = crate::cache::get_cached_wallpaper(&wp.image_url, &wp.id).await;
-        let url = if let Ok(path) = path_res {
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            format!("/cache/{}", filename)
-        } else {
-            let filename = wp
-                .image_url
-                .strip_prefix("/assets/uploads/")
-                .unwrap_or(&wp.image_url);
-            format!("/upload/{}", filename)
-        };
-
-        if let Ok(mut guard) = LIVE_WP_URL.lock() {
-            if *guard == url {
-                return; // Already playing this live wallpaper
-            }
-            *guard = url.clone();
-        }
-
-        let dom =
-            dioxus::core::VirtualDom::new_with_props(LiveWallpaperView, LiveWallpaperProps { url });
-        let wb = WindowBuilder::new()
-            .with_title("Wallr Live Background")
-            .with_decorations(false)
-            .with_always_on_bottom(true)
-            .with_maximized(true);
-
-        #[cfg(target_os = "linux")]
-        {
-            use dioxus::desktop::tao::platform::unix::WindowBuilderExtUnix;
-            wb = wb.with_window_type(vec![
-                dioxus::desktop::tao::platform::unix::WindowType::Desktop,
-            ]);
-        }
-
-        let cfg = Config::new().with_window(wb);
-        window.new_window(dom, cfg);
-    } else {
-        if let Ok(mut guard) = LIVE_WP_URL.lock() {
-            *guard = String::new(); // Stop any active live wallpaper
-        }
-
-        let image_url = wp.image_url.clone();
-        let wp_id = wp.id.clone();
-
-        let path_res = crate::cache::get_cached_wallpaper(&image_url, &wp_id).await;
-
-        let _ = tokio::task::spawn_blocking(move || {
-            if let Ok(cached_path) = path_res {
-                if let Ok(img) = image::open(&cached_path) {
-                    let temp_dir = std::env::temp_dir();
-                    let temp_path = temp_dir.join(format!("wallr_{}.jpg", wp_id));
-                    if img.save(&temp_path).is_ok() {
-                        if let Some(path_str) = temp_path.to_str() {
-                            let _ = wallpaper::set_from_path(path_str);
-                            let config = crate::config::AppConfig::load();
-                            let mode = match config.wallpaper_mode.as_str() {
-                                "Center" => wallpaper::Mode::Center,
-                                "Crop" => wallpaper::Mode::Crop,
-                                "Fit" => wallpaper::Mode::Fit,
-                                "Span" => wallpaper::Mode::Span,
-                                "Stretch" => wallpaper::Mode::Stretch,
-                                "Tile" => wallpaper::Mode::Tile,
-                                _ => wallpaper::Mode::Crop,
-                            };
-                            let _ = wallpaper::set_mode(mode);
-                        }
-                    }
-                }
-            }
-        })
-        .await;
     }
 }

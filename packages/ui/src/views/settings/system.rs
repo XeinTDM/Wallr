@@ -79,14 +79,12 @@ impl Default for AppConfig {
 
 impl AppConfig {
     fn get_path() -> std::path::PathBuf {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-        let root_dir = std::path::PathBuf::from(manifest_dir)
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
-            .and_then(|p| p.parent())
             .unwrap_or(&std::path::PathBuf::from("."))
-            .to_path_buf();
-            
-        root_dir.join(".desktop_data").join("config.json")
+            .join("desktop")
+            .join(".desktop_data")
+            .join("config.json")
     }
 
     pub fn load() -> Self {

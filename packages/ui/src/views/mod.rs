@@ -19,7 +19,7 @@ pub use login::Login;
 mod register;
 pub use register::Register;
 
-mod settings;
+pub mod settings;
 pub use settings::{
     SettingsLayout, SettingsAccount, SettingsAppearance, SettingsDownloads, SettingsNotifications,
 };
